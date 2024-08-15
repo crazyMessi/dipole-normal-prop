@@ -51,6 +51,14 @@ def xyz2tensor(txt, append_normals=True):
     rtn = torch.stack(pts, dim=0)
     return rtn
 
+def npxyz2tensor(np_pc, append_normals=True):
+    if np_pc.shape[1] == 3:
+        if append_normals:
+            np_pc = np.concatenate([np_pc, np.zeros((np_pc.shape[0], 3))], axis=1)
+        return torch.tensor(np_pc)
+    else:
+        return torch.tensor(np_pc)
+
 
 def divide_pc(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
               min_patch=0) -> (List[torch.Tensor], List[torch.Tensor]):
@@ -179,6 +187,12 @@ def estimate_normals_torch(inputpc, max_nn):
     return torch.cat([inputpc[:, :3], n], dim=-1)
 
 
+'''
+    Estimate normals for a point cloud using open3d
+    inputpc: torch.Tensor, point cloud (N X 3)
+    max_nn: int, number of nearest neighbors to consider
+    keep_orientation: bool, if True, the orientation of the normals is kept (建议设为False,防止使用到ground truth) 
+'''
 def estimate_normals(inputpc, max_nn=30, keep_orientation=False):
     try:
         import open3d as o3d
