@@ -51,6 +51,13 @@ def xyz2tensor(txt, append_normals=True):
     rtn = torch.stack(pts, dim=0)
     return rtn
 
+def npxyz2tensor(np_pc, append_normals=True):
+    if np_pc.shape[1] == 3:
+        if append_normals:
+            np_pc = np.concatenate([np_pc, np.zeros((np_pc.shape[0], 3))], axis=1)
+        return torch.tensor(np_pc)
+    else:
+        return torch.tensor(np_pc)
 
 def divide_pc(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
               min_patch=0) -> (List[torch.Tensor], List[torch.Tensor]):
