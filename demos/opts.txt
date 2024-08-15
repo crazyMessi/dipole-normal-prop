@@ -1,0 +1,12 @@
+export_dir: /home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/demos
+propagation_iters: 10
+number_parts: 15
+minimum_points_per_patch: 21
+curvature_threshold: 0.0
+pc: /home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/data
+models: []
+iters: 100
+diffuse: False
+weighted_prop: False
+estimate_normals: True
+n: 30

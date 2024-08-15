@@ -22,12 +22,33 @@ def simple_estimate(xyz_data,config):
     strongest_field_propagation_points(input_pc, diffuse=config['diffuse'], starting_point=0)
     if measure_mean_potential(input_pc) < 0:
         input_pc[:, 3:] *= -1
-    transformed_pc = transform.inverse(input_pc).transpose(0, 1)
+    transformed_pc = transform.inverse(input_pc)
+    transformed_pc = transformed_pc.cpu().numpy()
     return transformed_pc
 
-# def hoppe_estimate(xyz_data,config):
-    
 
+import open3d as o3d
+def hoppe_estimate(xyz_data,config):
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(xyz_data)
+    r = 0.1
+    if 'r' in config:
+        r = config['r']
+    k_neighbor = 10
+    if 'k_neighbor' in config:
+        k_neighbor = config['k_neighbor']
+    _lambda = 0.1
+    if 'lambda' in config:
+        _lambda = config['lambda']
+    _alpha = 0.5
+    if 'alpha' in config:
+        _alpha = config['alpha']
+
+    pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=r, max_nn=k_neighbor))
+    pcd.orient_normals_consistent_tangent_plane(k_neighbor, _lambda, _alpha)
+    normals = np.asarray(pcd.normals)
+    res = np.concatenate([xyz_data, normals], axis=1)
+    return res
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -65,15 +86,21 @@ def main():
                 # 假设接收到的数据是二进制形式的XYZ浮点数数组
                 xyz_data = np.frombuffer(data, dtype=np.float64).reshape(-1, 3)
 
+            
+                
                 # 计算法向量
                 if req['function_name'] == 'simple_estimate':
                     transformed_pc = simple_estimate(xyz_data, req['function_config'])
+                    result = transformed_pc
+                elif req['function_name'] == 'hoppe_estimate':
+                    transformed_pc = hoppe_estimate(xyz_data, req['function_config'])
                     result = transformed_pc
                 else:
                     print(f"Unknown method: {req['function_name']}")
                     assert False
 
                 # 返回结果
+                # conn.sendall(result.astype(np.float64).tobytes())
                 conn.sendall(result.astype(np.float64).tobytes())
                 conn.close()
 
