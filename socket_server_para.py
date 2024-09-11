@@ -28,8 +28,8 @@ def simple_estimate(xyz_data,config):
     return transformed_pc
 
 
-import open3d as o3d
 def hoppe_estimate(xyz_data,config):
+    import open3d as o3d
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(xyz_data)
     r = 0.1

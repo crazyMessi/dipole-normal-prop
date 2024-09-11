@@ -1,0 +1,12 @@
+export_dir: /home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/demos/lion
+propagation_iters: 4
+number_parts: 41
+minimum_points_per_patch: 100
+curvature_threshold: 0.0
+pc: /home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/data/lion.xyz
+models: [PosixPath('/home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/pre_trained/hands2.pt'), PosixPath('/home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/pre_trained/hands.pt'), PosixPath('/home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/pre_trained/manmade.pt')]
+iters: 5
+diffuse: True
+weighted_prop: True
+estimate_normals: False
+n: 50
