@@ -253,13 +253,13 @@ def timer_factory():
             self.count = count
 
         def __enter__(self):
-            self.start = time.clock()
+            self.start = time.perf_counter()
             if self.msg:
                 print(f'started: {self.msg}')
             return self
 
         def __exit__(self, typ, value, traceback):
-            self.duration = time.clock() - self.start
+            self.duration = time.perf_counter() - self.start
             if self.count:
                 MyTimer.total_count += self.duration
             if self.msg:
