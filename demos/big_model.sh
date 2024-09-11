@@ -3,7 +3,7 @@
 export BASE_PATH=$(cd ../; pwd)
 echo $BASE_PATH
 export PYTHONPATH=$BASE_PATH
-export MODEL_NAME = "big_model"
+export MODEL_NAME=scene0037_00_vh_clean_2
 
 python -u $BASE_PATH/orient_large.py \
 --pc $BASE_PATH/data/$MODEL_NAME.xyz \

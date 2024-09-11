@@ -59,7 +59,6 @@ def npxyz2tensor(np_pc, append_normals=True):
     else:
         return torch.tensor(np_pc)
 
-
 def divide_pc(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
               min_patch=0) -> (List[torch.Tensor], List[torch.Tensor]):
     '''

@@ -28,8 +28,8 @@ def simple_estimate(xyz_data,config):
     return transformed_pc
 
 
-import open3d as o3d
 def hoppe_estimate(xyz_data,config):
+    import open3d as o3d
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(xyz_data)
     r = 0.1
@@ -116,6 +116,16 @@ def main():
             t.start()
             print(f"Active threads: {threading.active_count()}")
             
-        
+import argparse
 if __name__ == "__main__":
+    # 输入参数
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int, default=12344, help='Port number')
+    parser.add_argument('--max_thread', type=int, default=50, help='Max thread number')
+    parser.add_argument('--gpu', type=int, default=0, help='GPU number')
+    args = parser.parse_args()
+    torch.cuda.set_device(args.gpu)
+    device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
+    PORT = args.port
+    max_thread = args.max_thread
     main()
