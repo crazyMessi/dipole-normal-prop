@@ -1,10 +1,10 @@
-export_dir: D:\Documents\zhudoongli\CG\project\NormalEstimation\dipole-normal-prop\demos\scene0054_00_vh_clean_2
+export_dir: /home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/demos/scene0054_00_vh_clean_2
 propagation_iters: 4
 number_parts: 41
-minimum_points_per_patch: 100
+minimum_points_per_patch: 5000
 curvature_threshold: 0.0
-pc: D:\Documents\zhudoongli\CG\project\NormalEstimation\dipole-normal-prop\data\scene0054_00_vh_clean_2.xyz
-models: [WindowsPath('D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop/pre_trained/hands2.pt'), WindowsPath('D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop/pre_trained/hands.pt'), WindowsPath('D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop/pre_trained/manmade.pt')]
+pc: /home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/data/scene0054_00_vh_clean_2.xyz
+models: [PosixPath('/home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/pre_trained/hands2.pt'), PosixPath('/home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/pre_trained/hands.pt'), PosixPath('/home/lizd/doc/projects/NormalEstimate/dipole-normal-prop/pre_trained/manmade.pt')]
 iters: 5
 diffuse: True
 weighted_prop: True
