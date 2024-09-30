@@ -78,7 +78,6 @@ def run(opts):
 
 if __name__ == '__main__':
     opts = get_parser().parse_args()
-
     opts.export_dir.mkdir(exist_ok=True, parents=True)
     options.export_options(opts)
     run(opts)

@@ -9,7 +9,7 @@ torch.manual_seed(1)
 
 # 设置服务器的IP和端口
 HOST = '0.0.0.0'  # 监听所有IP地址
-PORT = 12344     # 监听的端口号
+PORT = 12343     # 监听的端口号
 REQUEST_BUFFER_SIZE = 1000 # 接收缓冲区大小，单位为字节
 max_thread = 50 # 同时处理的最大线程数
         

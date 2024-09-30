@@ -26,6 +26,15 @@ def simple_estimate(xyz_data,config):
     transformed_pc = transformed_pc.cpu().numpy()
     return transformed_pc
 
+def test_api():
+    data_path = "data/ok.xyz"
+    xyz_data = np.loadtxt(data_path)
+    config = {
+        "diffuse": True
+    }
+    result = simple_estimate(xyz_data, config)
+    print(result)
+
 
 import open3d as o3d
 def hoppe_estimate(xyz_data,config):
@@ -105,4 +114,5 @@ def main():
                 conn.close()
 
 if __name__ == "__main__":
+    test_api()
     main()
