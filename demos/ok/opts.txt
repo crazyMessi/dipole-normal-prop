@@ -1,0 +1,12 @@
+export_dir: D:\Documents\zhudoongli\CG\project\NormalEstimation\dipole-normal-prop\demos\ok
+propagation_iters: 4
+number_parts: 41
+minimum_points_per_patch: 100
+curvature_threshold: 0.0
+pc: D:\Documents\zhudoongli\CG\project\NormalEstimation\dipole-normal-prop\data\ok.xyz
+models: [WindowsPath('D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop/pre_trained/hands2.pt'), WindowsPath('D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop/pre_trained/hands.pt'), WindowsPath('D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop/pre_trained/manmade.pt')]
+iters: 5
+diffuse: True
+weighted_prop: True
+estimate_normals: False
+n: 50

@@ -7,7 +7,9 @@ echo %BASE_PATH%
 
 REM Set the PYTHONPATH and MODEL_NAME environment variables
 set PYTHONPATH=%BASE_PATH%
-set MODEL_NAME=scene0054_00_vh_clean_2
+set MODEL_NAME=ok
+
+echo %BASE_PATH%
 
 
 REW print the cmd
@@ -25,9 +27,8 @@ echo python -u %BASE_PATH%/orient_large.py ^
 --weighted_prop ^
 --n 50
 
-
-REM Run the Python script with the necessary arguments
-python -u %BASE_PATH%/orient_large.py ^
+@REM 打印cmd
+echo python -u %BASE_PATH%/orient_large.py ^
 --pc %BASE_PATH%/data/%MODEL_NAME%.xyz ^
 --export_dir %BASE_PATH%/demos/%MODEL_NAME% ^
 --models %BASE_PATH%/pre_trained/hands2.pt ^
@@ -40,3 +41,20 @@ python -u %BASE_PATH%/orient_large.py ^
 --diffuse ^
 --weighted_prop ^
 --n 50
+
+
+
+@REM REM Run the Python script with the necessary arguments
+@REM python -u %BASE_PATH%/orient_large.py ^
+@REM --pc %BASE_PATH%/data/%MODEL_NAME%.xyz ^
+@REM --export_dir %BASE_PATH%/demos/%MODEL_NAME% ^
+@REM --models %BASE_PATH%/pre_trained/hands2.pt ^
+@REM %BASE_PATH%/pre_trained/hands.pt ^
+@REM %BASE_PATH%/pre_trained\manmade.pt ^
+@REM --iters 5 ^
+@REM --propagation_iters 4 ^
+@REM --number_parts 41 ^
+@REM --minimum_points_per_patch 100 ^
+@REM --diffuse ^
+@REM --weighted_prop ^
+@REM --n 50

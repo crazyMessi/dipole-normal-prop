@@ -139,7 +139,7 @@ def strongest_field_propagation_reps(input_pc, reps, diffuse=False, weights=None
 
         # find the flattest patch to start with
         curv = [util.pca_eigen_values(pts[patch]) for patch in patches]
-        min_index = np.array([curv[i][0] for i in range(len(patches))])
+        min_index = np.array([curv[i][0].cpu() for i in range(len(patches))])
         min_index = np.abs(min_index)
         min_index = np.argmin(min_index)
 
@@ -193,6 +193,7 @@ def strongest_field_propagation_reps(input_pc, reps, diffuse=False, weights=None
             pts[:, 3:] = pts[:, 3:] / weights[:, None]
 
 
+# 对每个patch使用
 def strongest_field_propagation(pts, patches, all_patches, diffuse=False, weights=None):
     with torch.no_grad():
         if weights is not None:
@@ -258,6 +259,8 @@ def strongest_field_propagation(pts, patches, all_patches, diffuse=False, weight
             pts[:, 3:] = pts[:, 3:] / weights[:, None]
 
 
+
+# 单独使用
 def strongest_field_propagation_points(pts: torch.Tensor, diffuse=False, starting_point=0):
         device = pts.device
         pts = pts.cuda()

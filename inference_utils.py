@@ -48,7 +48,7 @@ def voting_policy(probs):
     probs = torch.stack(probs, dim=0).mean(dim=0)
     return probs < 0.5, probs
 
-
+# 过滤到不符合条件的patch
 def fix_n_filter(input_pc, patch_indices, threshold):
     def criterion(patch):
         x = input_pc[patch]

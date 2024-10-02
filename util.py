@@ -73,7 +73,7 @@ def divide_pc(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
 
     '''
     def mask_to_index(mask, n):
-        return torch.arange(n)[mask]
+        return torch.arange(n).to(mask.device)[mask]
 
     def bounds(t):
         l = edge_len * t + ranges[0]
