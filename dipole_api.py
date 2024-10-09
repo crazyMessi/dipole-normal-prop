@@ -119,7 +119,7 @@ def get_parser():
     parser.add_argument('--models', type=Path, nargs='+', default=models,
                         help='path to the models')    
     parser.add_argument('--export_dir', type=Path, default=export_dir, help='path to the output directory')
-    parser.add_argument('--number_parts', type=int, default=41, help='number of parts to divide the point cloud')
+    parser.add_argument('--number_parts', type=int, default=10, help='number of parts to divide the point cloud')
     parser.add_argument('--minimum_points_per_patch', type=int, default=100, help='minimum number of points per patch')
     parser.add_argument('--curvature_threshold', type=float, default=0.0, help='curvature threshold')
     parser.add_argument('--iters', type=int, default=5, help='number of iterations')

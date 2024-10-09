@@ -65,6 +65,7 @@ def field_grad(sources, means, eps=1e-5, recursive=True, max_pts=15000):
         torch.Tensor meansX3 field at measurement positions
     """
 
+    # recursive calculation for large number of points（if the number of points is too large, the calculation will be divided into two parts）
     if recursive:
         def break_by_means():
             mid = int(means.shape[0] / 2)
@@ -98,6 +99,14 @@ def field_grad(sources, means, eps=1e-5, recursive=True, max_pts=15000):
     E_total[E_total.isnan()] = 0
     return E_total
 
+def field_edge_calculator(sources, means):
+    temp_sources = sources.clone()
+    temp_means = means.clone()
+    w = field_grad(temp_sources, temp_means).sum().item() + field_grad(temp_means, temp_sources).sum().item()
+    temp_means[:, 3:] = -temp_means[:, 3:]
+    invw = field_grad(temp_sources, temp_means).sum().item() + field_grad(temp_means, temp_sources).sum().item()
+    return w, invw
+    
 
 def reference_field(pc1, pc2):
     with torch.no_grad():
