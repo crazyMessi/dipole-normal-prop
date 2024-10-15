@@ -16,7 +16,6 @@ max_thread = 50 # 同时处理的最大线程数
 device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
 
 def simple_estimate(xyz_data,config):
-    
     input_pc = util.npxyz2tensor(xyz_data).to(device)
     input_pc = util.estimate_normals(input_pc, max_nn=30)
     util.draw_pc(input_pc, path=Path("data/output/server_init.ply"))
@@ -28,6 +27,10 @@ def simple_estimate(xyz_data,config):
     transformed_pc = transformed_pc.cpu().numpy()
     util.draw_pc(transformed_pc, path=Path("data/output/server_result.ply"))
     return transformed_pc
+
+import graph_dipole
+def graph_dipole_estimate(xyz_data,config):
+    return graph_dipole.graph_dipole_api(xyz_data,config)
 
 def hoppe_estimate(xyz_data,config):
     import open3d as o3d
@@ -88,6 +91,9 @@ def handle_client(conn, addr):
             elif req['function_name'] == 'hoppe_estimate':
                 transformed_pc = hoppe_estimate(xyz_data, req['function_config'])
                 result = transformed_pc
+            elif req['function_name'] == 'graph_dipole_estimate':
+                transformed_pc = graph_dipole_estimate(xyz_data, req['function_config'])
+                result = transformed_pc
             else:
                 print(f"Unknown method: {req['function_name']}")
                 assert False
@@ -103,7 +109,7 @@ def handle_client(conn, addr):
 import threading
 import time
 
-def main():
+def multithread():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((HOST, PORT))
         s.listen()
@@ -115,7 +121,17 @@ def main():
             t = threading.Thread(target=handle_client, args=(conn, addr))
             t.start()
             print(f"Active threads: {threading.active_count()}")
-            
+
+def single_thread():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((HOST, PORT))
+        s.listen()
+        print(f"Server listening on {HOST}:{PORT}")
+        while True:
+            conn, addr = s.accept()
+            handle_client(conn, addr)
+            print(f"Active threads: {threading.active_count()}")
+     
 import argparse
 if __name__ == "__main__":
     # 输入参数
@@ -128,4 +144,7 @@ if __name__ == "__main__":
     device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
     PORT = args.port
     max_thread = args.max_thread
-    main()
+    if max_thread > 1:
+        multithread()
+    else:
+        single_thread()

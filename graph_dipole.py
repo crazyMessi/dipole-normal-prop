@@ -8,7 +8,7 @@ import open3d as o3d
 
 base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop"
 # pc_name = "93001_scene0037_00_vh_clean_2_gt67.ply"
-pc_name = "it_25_scene_37_gt68.ply"
+pc_name = "flower.xyz"
 
 input_pc_path = base_path + "/data/" + pc_name
 output_path = base_path + "/data/output/"
@@ -34,7 +34,26 @@ def single_dipole(pc_path):
     input_pc =  _st_propagation_points(input_pc)
     util.draw_pc(input_pc, path=Path(output_path + "/simple_result.ply"))
 
+def graph_dipole_api(xyz_data,config):
+    device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
+    input_pc = util.npxyz2tensor(xyz_data).to(device)
+    input_pc = util.estimate_normals(input_pc, max_nn=config['max_nn'])
+    input_pc, transform = util.Transform.trans(input_pc)
+    G,index = util.divide_pc_to_graph(input_pc, 
+                                      n_part=config["n_part"],
+                                      min_patch=config["min_patch"],
+                                      edge_calculator=field_utils.field_edge_calculator,
+                                      point_estimator=_st_propagation_points)
+    input_pc = transform.inverse(input_pc)
+    A,B = G.to_matrix()
+    flip = MIQP(A,B)
+    for i in range(len(flip)):
+        if flip[i] == 1:
+            input_pc[index[i],3:] *= -1
+    return input_pc.cpu().numpy()      
+
 def graph_dipole(pc_path):
+    # load data
     device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
     MyTimer = util.timer_factory()
     with MyTimer('load pc', count=False):
@@ -47,7 +66,9 @@ def graph_dipole(pc_path):
             normals = torch.tensor(normals, dtype=torch.float32, device=device)
             gt_pc = torch.tensor(torch.cat([xyz, normals], dim=1), dtype=torch.float32, device=device)
     print(input_pc.shape)
+    
     input_pc, transform = util.Transform.trans(input_pc)
+    
     with MyTimer('estimating normals'):
         input_pc = util.estimate_normals(input_pc, max_nn=30)
         # input_pc = util.meshlab_estimate_normal(input_pc)
