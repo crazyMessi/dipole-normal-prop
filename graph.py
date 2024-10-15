@@ -3,6 +3,8 @@ import util
 import numpy as np
 import gurobipy as gp
 
+import os
+import open3d as o3d
 import numpy as np
 '''
     Parameters:
@@ -152,6 +154,87 @@ class BidGraph:
         self.E.append(BiEdge(u,v,w,invw))
         return self
 
+class GraphPC:
+    def __init__(self,G,pc,indices,gt):
+        self.G = G
+        self.pc = pc
+        self.indices = indices
+        self.gt = gt
+        assert len(pc) == len(gt)
+    
+    def cal_flip_acc(self):
+        n = len(self.indices)
+        true_count = 0
+        for i in range(n):
+            if self.is_right_patch(i):
+                true_count += 1
+        return max(true_count,n-true_count)/n
+    
+    def is_right_patch(self,i):
+        gt_i_normal = self.gt[self.indices[i]][:,3:]
+        pc_i_normal = self.pc[self.indices[i]][:,3:]
+        return (gt_i_normal * pc_i_normal).sum() > 0
+
+    
+    def is_good_edge(self,edge):
+        ustatus = self.is_right_patch(edge.u)
+        vstatus = self.is_right_patch(edge.v)
+        if edge.w > 0:
+            return ustatus == vstatus
+        else:
+            return ustatus != vstatus
+        
+    def cal_edge_acc(self):
+        good_count = 0
+        for edge in self.G.E:
+            if self.is_good_edge(edge):
+                good_count += 1
+        return good_count/len(self.G.E)
+    
+    def get_edge_correctness(self):
+        res = []
+        for edge in self.G.E:
+            res.append(self.is_good_edge(edge))
+        return res
+    
+    def save_egde(self,edge,floder="temp"):
+        u = self.indices[edge.u]
+        v = self.indices[edge.v]
+        os.makedirs(floder, exist_ok=True)
+        filename = floder + "/" + str(edge.u) + "_" + str(edge.v) + "_" +  str(edge.w) + ".ply"
+        # 保存边
+        u = self.pc[self.indices[edge.u]].cpu().numpy()
+        v = self.pc[self.indices[edge.v]].cpu().numpy()
+        ops = np.concatenate([u,v],axis=0)
+        color = np.zeros([len(ops), 3])
+        color[:len(u)] = [1,0,0]
+        color[len(u):] = [0,0,1]
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(ops[:, :3])
+        pcd.normals = o3d.utility.Vector3dVector(ops[:, 3:])
+        pcd.colors = o3d.utility.Vector3dVector(color)
+        o3d.io.write_point_cloud(filename, pcd)
+        
+    
+    def save_wrong_edge(self,path):
+        res = []
+        for edge in self.G.E:
+            if not self.is_good_edge(edge):
+                self.save_egde(edge,path)
+        return res
+    
+    def get_node_flip_status(self):
+        res = []
+        for i in range(len(self.indices)):
+            res.append(self.is_right_patch(i))
+        return res
+    
+    
+    def print_metrics(self):
+        print("flip acc: ",self.cal_flip_acc())
+        print("edge acc: ",self.cal_edge_acc())
+        return 0
+
 
 '''
 计算一个指派的weight_sum
@@ -181,8 +264,9 @@ def MIQP(A,B):
     x = m.addVars(n, vtype=gp.GRB.BINARY, name="x")
     # Set objective
     obj = gp.QuadExpr()
-    obj -= cal_loss(x,A,B)
+    obj += cal_loss(x,A,B)
     m.setObjective(obj, gp.GRB.MAXIMIZE)
+    m.setParam('OutputFlag', 0)
 
     # find the optimal solution
     m.optimize()

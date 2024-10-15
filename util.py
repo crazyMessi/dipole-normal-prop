@@ -8,7 +8,9 @@ import open3d as o3d
 
 def draw_pc(pc, path,labels=None):
     open3d_pc = o3d.geometry.PointCloud()
-    pc = pc.cpu().numpy()
+    # pc = pc.cpu().numpy()
+    if type(pc) == torch.Tensor:
+        pc = pc.cpu().numpy()
     open3d_pc.points = o3d.utility.Vector3dVector(pc[:, :3])
     open3d_pc.normals = o3d.utility.Vector3dVector(pc[:, 3:])
     
@@ -75,7 +77,12 @@ def npxyz2tensor(np_pc, append_normals=True):
         return torch.tensor(np_pc)
 
 
-# 计算每个点在grid网络中的索引，而不是判断是否在某个grid中
+'''
+计算每个点在grid网络中的索引，而不是判断是否在某个grid中
+return: 
+    indices: List[torch.Tensor] a list of indices in pc_in corresponding to each part
+    patch_ijk: List[torch.Tensor] a list of grid indices corresponding to each element in indices
+'''
 def _lzd_divide_pc(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
                    min_patch=0):
     x_idx_map = torch.linspace(ranges[0], ranges[1], n_part + 1).to(pc_in.device)
@@ -139,13 +146,20 @@ def _divide_pc(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
                     indices.append([mask_to_index(total_mask, num_points)])
                     ijk.append([torch.tensor([i, j, k])])
     return indices, ijk
-    
+
+
+'''
+将点云划分为图,每个节点为一个patch
+return: 
+    G: BidGraph, 图
+    indices: List[torch.Tensor] a list of indices, indices[i]表示G的第i个节点的点在pc_in中的索引
+'''
 def divide_pc_to_graph(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
                 min_patch=0, edge_calculator=None,point_estimator=None):        
         # 并行执行point_estimator
         def thread_func(i):
             if point_estimator is not None:
-                point_estimator(pc_in[indices[i]])
+                pc_in[indices[i]] = point_estimator(pc_in[indices[i]])
         MyTimer = util.timer_factory()
         
         # with MyTimer('divide pc into grid'):
@@ -189,7 +203,11 @@ def divide_pc_to_graph(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
         return G, indices
               
 
-
+'''
+return: indices: List[torch.Tensor] a list of indices corresponding to each part
+eg: indices[0] = [1,2,3,4,5,6,7,8,9,10], indices[1] = [11,12,13,14,15,16,17,18,19,20], 
+for 20 points and n_part = 2
+'''
 def divide_pc(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
               min_patch=0) -> (List[torch.Tensor], List[torch.Tensor]):
     indices, ijk = _divide_pc(pc_in, n_part, ranges, min_patch)
@@ -197,6 +215,7 @@ def divide_pc(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
 
 import open3d as o3d
 from graph import *
+
 def draw_topology(G,pc,patches,nodelabel = [],edgelabel = [],path = None):
     '''
     用open3d画出图的拓扑结构
@@ -236,7 +255,7 @@ def draw_topology(G,pc,patches,nodelabel = [],edgelabel = [],path = None):
     o3dmesh.vertices = o3d.utility.Vector3dVector(mesh[0])
     o3dmesh.triangles = o3d.utility.Vector3iVector(mesh[1])
     o3dmesh.vertex_colors = o3d.utility.Vector3dVector(colors)
-    o3d.visualization.draw_geometries([o3dmesh])
+    # o3d.visualization.draw_geometries([o3dmesh])
     if path is not None:
         o3d.io.write_triangle_mesh(str(path), o3dmesh)
     return o3dmesh
@@ -358,6 +377,7 @@ def estimate_normals(inputpc, max_nn=30, keep_orientation=False):
             flip = (inputpc[:, 3:] * inputpc_unoriented[:, 3:]).sum(dim=-1) < 0
             inputpc_unoriented[flip, 3:] *= -1
     except ModuleNotFoundError:
+        print('open3d not found, using torch_cluster instead')
         inputpc_unoriented = estimate_normals_torch(inputpc, max_nn)
 
     return inputpc_unoriented

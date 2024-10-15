@@ -91,7 +91,7 @@ def field_grad(sources, means, eps=1e-5, recursive=True, max_pts=15000):
 
     p = sources[:, 3:]
     R = sources[:, None, :3] - means[None, :, :3]
-    R_unit = R / R.norm(dim=-1)[:, :, None]
+    R_unit = R / R.norm(dim=-1)[:, :, None] # r只有方向，没有大小
     E = 3 * (p[:, None, :] * R_unit).sum(dim=-1)[:, :, None] * R_unit - p[:, None, :]
     E = E / (R.norm(dim=-1) ** 3 + eps)[:, :, None]
     E_total = E.sum(dim=0) * -1  # field=(-1)*grad -> flip the sign to get the gradient instead of -gradient
@@ -99,12 +99,33 @@ def field_grad(sources, means, eps=1e-5, recursive=True, max_pts=15000):
     E_total[E_total.isnan()] = 0
     return E_total
 
-def field_edge_calculator(sources, means):
-    temp_sources = sources.clone()
-    temp_means = means.clone()
-    w = field_grad(temp_sources, temp_means).sum().item() + field_grad(temp_means, temp_sources).sum().item()
-    temp_means[:, 3:] = -temp_means[:, 3:]
-    invw = field_grad(temp_sources, temp_means).sum().item() + field_grad(temp_means, temp_sources).sum().item()
+def field_edge_calculator_bool(sources, means, if_save=False):
+    w,invw = field_edge_calculator(sources, means, if_save)
+    if w > 0:
+        return 1,-1
+    else :
+        return -1,1
+
+
+def field_edge_calculator_count(sources, means, if_save=False):
+    w,invw = field_edge_calculator(sources, means, if_save)
+    w = sources.shape[0]*means.shape[0]
+    if w > 0:
+        return w,-w
+    else :
+        return -w,w
+
+def field_edge_calculator(sources, means, if_save=False):
+    def cal_w(S,T):    
+        st_E = field_grad(S, T)
+        st_interaction = (st_E * T[:,3:]).sum(dim=-1).sum()
+        ts_E = field_grad(T,S)
+        ts_interaction = (ts_E * S[:,3:]).sum(dim=-1).sum()
+        return st_interaction + ts_interaction
+
+    w = cal_w(sources,means) 
+    w = w.detach().cpu().numpy()
+    invw = w * -1
     return w, invw
     
 
@@ -124,6 +145,9 @@ def reference_field(pc1, pc2):
         return pc2
 
 
+'''
+每个patch使用部分点云来代表
+'''
 def strongest_field_propagation_reps(input_pc, reps, diffuse=False, weights=None):
     input_pc = input_pc.detach()
     with torch.no_grad():

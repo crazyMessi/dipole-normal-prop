@@ -9,24 +9,25 @@ torch.manual_seed(1)
 
 # 设置服务器的IP和端口
 HOST = '0.0.0.0'  # 监听所有IP地址
-PORT = 12343     # 监听的端口号
+PORT = 12344     # 监听的端口号
 REQUEST_BUFFER_SIZE = 1000 # 接收缓冲区大小，单位为字节
 max_thread = 50 # 同时处理的最大线程数
         
 device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
 
-
 def simple_estimate(xyz_data,config):
+    
     input_pc = util.npxyz2tensor(xyz_data).to(device)
     input_pc = util.estimate_normals(input_pc, max_nn=30)
+    util.draw_pc(input_pc, path=Path("data/output/server_init.ply"))
     input_pc, transform = util.Transform.trans(input_pc)
     strongest_field_propagation_points(input_pc, diffuse=config['diffuse'], starting_point=0)
     if measure_mean_potential(input_pc) < 0:
         input_pc[:, 3:] *= -1
     transformed_pc = transform.inverse(input_pc)
     transformed_pc = transformed_pc.cpu().numpy()
+    util.draw_pc(transformed_pc, path=Path("data/output/server_result.ply"))
     return transformed_pc
-
 
 def hoppe_estimate(xyz_data,config):
     import open3d as o3d
@@ -98,7 +99,6 @@ def handle_client(conn, addr):
             conn.sendall(json.dumps({"status": "ERROR"}).encode())
         finally:
             conn.close()
-    
     
 import threading
 import time
