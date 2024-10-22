@@ -137,7 +137,7 @@ if __name__ == "__main__":
     # 输入参数
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=12344, help='Port number')
-    parser.add_argument('--max_thread', type=int, default=50, help='Max thread number')
+    parser.add_argument('--max_thread', type=int, default=max_thread, help='Max thread number')
     parser.add_argument('--gpu', type=int, default=0, help='GPU number')
     args = parser.parse_args()
     torch.cuda.set_device(args.gpu)

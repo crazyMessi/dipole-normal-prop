@@ -7,8 +7,8 @@ from graph import *
 import open3d as o3d
 
 base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop"
-# pc_name = "93001_scene0037_00_vh_clean_2_gt67.ply"
-pc_name = "flower.xyz"
+pc_name = "93001_scene0037_00_vh_clean_2_gt67.ply"
+# pc_name = "flower.xyz"
 
 input_pc_path = base_path + "/data/" + pc_name
 output_path = base_path + "/data/output/"
@@ -39,11 +39,25 @@ def graph_dipole_api(xyz_data,config):
     input_pc = util.npxyz2tensor(xyz_data).to(device)
     input_pc = util.estimate_normals(input_pc, max_nn=config['max_nn'])
     input_pc, transform = util.Transform.trans(input_pc)
-    G,index = util.divide_pc_to_graph(input_pc, 
-                                      n_part=config["n_part"],
-                                      min_patch=config["min_patch"],
-                                      edge_calculator=field_utils.field_edge_calculator,
-                                      point_estimator=_st_propagation_points)
+    
+    if config['divide_method'] == 'grid_partition':
+
+        G,index = util.divide_pc_to_graph(input_pc, 
+                                        n_part=config["n_part"],
+                                        min_patch=config["min_patch"],
+                                        edge_calculator=field_utils.field_edge_calculator,
+                                        point_estimator=_st_propagation_points)
+    
+    elif config['divide_method'] == 'ncut_partition':
+        G,index = util.divide_pc_by_ncut(input_pc,
+                                         k_neighbors=config["k_neighbors"],
+                                         mininum_rate=config["mininum_rate"],
+                                         edge_calculator=field_utils.field_edge_calculator,
+                                         point_estimator=_st_propagation_points)
+    else:   
+        print("Error: no such divide method")
+        return 
+    
     input_pc = transform.inverse(input_pc)
     A,B = G.to_matrix()
     flip = MIQP(A,B)
@@ -52,7 +66,7 @@ def graph_dipole_api(xyz_data,config):
             input_pc[index[i],3:] *= -1
     return input_pc.cpu().numpy()      
 
-def graph_dipole(pc_path):
+def graph_dipole(pc_path, use_ncut=True):
     # load data
     device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
     MyTimer = util.timer_factory()
@@ -72,10 +86,22 @@ def graph_dipole(pc_path):
     with MyTimer('estimating normals'):
         input_pc = util.estimate_normals(input_pc, max_nn=30)
         # input_pc = util.meshlab_estimate_normal(input_pc)
+    
+    with MyTimer('divide to graph and rectify patches'):    
+        if not use_ncut:
+            G,index = util.divide_pc_to_graph(input_pc, 
+                                            n_part=10,
+                                            min_patch=0,
+                                            edge_calculator=field_utils.field_edge_calculator,
+                                            point_estimator=_st_propagation_points)
+        else:
+            G,index = util.divide_pc_by_ncut(input_pc,
+                                             k_neighbors=30,
+                                             mininum_rate=1.0 / 10,
+                                             edge_calculator=field_utils.field_edge_calculator,
+                                             point_estimator=_st_propagation_points)
         
-    with MyTimer('divide patches'):    
-        G,index = util.divide_pc_to_graph(input_pc, n_part=12, min_patch=21,edge_calculator=field_utils.field_edge_calculator,point_estimator=_st_propagation_points)
-        print("number of patches: ",len(G.V))
+                                             
      
     labels = torch.zeros(input_pc.shape[0])
     for i in range(len(index)):
@@ -101,6 +127,7 @@ def graph_dipole(pc_path):
         edge_labels = [int(x.cpu().numpy()) for x in edge_labels]
         util.draw_topology(G,input_pc,index,nodelabel=node_labels,edgelabel=edge_labels,path=output_path + "/colored_topology.ply")
         g_pc.save_wrong_edge(output_path + "/wrong_edge")
+        g_pc.save_all_edge(output_path + "/all_edge")
     
     util.draw_pc(input_pc, path=Path(output_path + "/final_result.ply"),labels=labels)
     util.draw_topology(G,input_pc,index,path=output_path + "/topology.ply")

@@ -121,12 +121,25 @@ def field_edge_calculator(sources, means, if_save=False):
         st_interaction = (st_E * T[:,3:]).sum(dim=-1).sum()
         ts_E = field_grad(T,S)
         ts_interaction = (ts_E * S[:,3:]).sum(dim=-1).sum()
+        st_interaction /= S.shape[0] * T.shape[0]
+        ts_interaction /= S.shape[0] * T.shape[0]
         return st_interaction + ts_interaction
 
     w = cal_w(sources,means) 
     w = w.detach().cpu().numpy()
     invw = w * -1
     return w, invw
+
+# 将nxyz分成两部分，分别计算自相互作用
+def self_interaction(nxyz, eps=1e-5):
+    assert nxyz.shape[1] == 6
+    num = nxyz.shape[0]
+    mask = torch.ones(num,dtype=torch.bool)
+    mask[torch.randperm(nxyz.shape[0])[:int(num / 2)]]=False
+    nxyz1 = nxyz[mask]
+    nxyz2 = nxyz[~mask]
+    w,_ = field_edge_calculator(nxyz1, nxyz2)
+    return w
     
 
 def reference_field(pc1, pc2):

@@ -85,6 +85,8 @@ return:
 '''
 def _lzd_divide_pc(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
                    min_patch=0):
+    
+    
     x_idx_map = torch.linspace(ranges[0], ranges[1], n_part + 1).to(pc_in.device)
     y_idx_map = torch.linspace(ranges[0], ranges[1], n_part + 1).to(pc_in.device)
     z_idx_map = torch.linspace(ranges[0], ranges[1], n_part + 1).to(pc_in.device)
@@ -149,6 +151,7 @@ def _divide_pc(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
 
 
 '''
+point_estimator: function, 用于估计每个patch的点法向量
 将点云划分为图,每个节点为一个patch
 return: 
     G: BidGraph, 图
@@ -156,10 +159,6 @@ return:
 '''
 def divide_pc_to_graph(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
                 min_patch=0, edge_calculator=None,point_estimator=None):        
-        # 并行执行point_estimator
-        def thread_func(i):
-            if point_estimator is not None:
-                pc_in[indices[i]] = point_estimator(pc_in[indices[i]])
         MyTimer = util.timer_factory()
         
         # with MyTimer('divide pc into grid'):
@@ -169,15 +168,25 @@ def divide_pc_to_graph(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
             indices, ijk = _lzd_divide_pc(pc_in, n_part, ranges, min_patch)
             
         with MyTimer('merge nodes'):
-            indices, ijk = merge_nodes(pc_in[:, :3], indices, ijk, min_patch)    
+            # indices, ijk= merge_nodes(pc_in, indices, ijk, min_patch)
+            indices, ijk, ijk_source = lzd_merge_nodes(pc_in, indices, ijk, min_patch)
+            # ijk = [i[0] for i in ijk]
+            # indices = [i[0] for i in indices]
+            # ijk_source = [[ijk[i]] for i in range(len(indices))]
         
-        def if_neibor(i, j):
-            idxi = ijk[i][0]
-            idxj = ijk[j][0]
-            if (idxi - idxj).abs().sum() == 1:
-                return 1   
+        
+        def if_neibor(ijk_source1, ijk_source2):
+            for i in range(len(ijk_source1)):
+                for j in range(len(ijk_source2)):
+                    if (ijk_source1[i] - ijk_source2[j]).abs().sum() == 1:
+                        return True
+            return False  
             
         with MyTimer('point estimator'):  
+             # 并行执行point_estimator
+            def thread_func(i):
+                if point_estimator is not None:
+                    pc_in[indices[i]] = point_estimator(pc_in[indices[i]])
             threads = []
             for i in range(len(indices)):
                 t = threading.Thread(target=thread_func, args=(i,))
@@ -193,7 +202,7 @@ def divide_pc_to_graph(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
             for i in range(len(indices)):
                 for j in range(i + 1, len(indices)):
                     # 判断i,j是否相邻
-                    if not if_neibor(i, j):
+                    if not if_neibor(ijk_source[i], ijk_source[j]):
                         continue
                     if edge_calculator is not None:    
                         w, invw = edge_calculator(pc_in[indices[i]], pc_in[indices[j]])
@@ -201,7 +210,125 @@ def divide_pc_to_graph(pc_in: torch.Tensor, n_part: int, ranges=(-1.5, 1.5),
                         assert False
                     G.E.append(BiEdge(i, j, w, invw))
         return G, indices
-              
+
+
+def if_pc_bbox_intersect(pc1, pc2):
+    assert type(pc1) == np.ndarray and type(pc2) == np.ndarray
+    assert pc1.shape[1] == 3 and pc2.shape[1] == 3
+    min1 = pc1.min(axis=0)
+    max1 = pc1.max(axis=0)
+    min2 = pc2.min(axis=0)
+    max2 = pc2.max(axis=0)
+    return (min1 <= max2).all() and (max1 >= min2).all()
+
+'''
+判断两个点云是否存在距离小于threshold的点对
+'''
+def if_pc_neibor(pc1,pc2,threshold):
+    pc1 = pc1[:, :3]
+    pc2 = pc2[:, :3]
+    assert (type(pc1) == np.ndarray and type(pc2) == np.ndarray) or (type(pc1) == torch.Tensor and type(pc2) == torch.Tensor)
+    # 判断是否存在某个轴上的距离大于threshold 如果有则不相邻
+   
+    if type(pc1) == np.ndarray:
+        if (pc1.min(axis=0) - pc2.max(axis=0) > threshold).any() or (pc1.max(axis=0) - pc2.min(axis=0) < -threshold).any():
+            return False
+    
+        for i in range(len(pc1)):
+            dist = np.linalg.norm(pc1[i] - pc2, axis=1)
+            if np.min(dist) < threshold:
+                return True
+            
+    else:
+        if (pc1.min(dim=0).values - pc2.max(dim=0).values > threshold).any() or (pc1.max(dim=0).values - pc2.min(dim=0).values < -threshold).any():
+            return False
+        for i in range(len(pc1)):
+            dist  = torch.norm(pc1[i] - pc2, dim=1)
+            if torch.min(dist) < threshold:
+                return True
+    return False
+
+
+'''
+计算k近邻的最远距离的中位数
+'''
+def avg_min_dist(pc: np.ndarray, k: int):
+    # 建立kd树
+    from sklearn.neighbors import KDTree
+    tree = KDTree(pc[:, :3])
+    if len(pc) < k + 1:
+        k = len(pc) - 1
+    assert k > 0
+    dist, _ = tree.query(pc[:, :3], k=k + 1)
+    return np.median(dist[:, -1])
+
+'''
+k_neighbors: int, number of neighbors to consider
+mininum_rate: float, 当叶子节点的点数小于mininum_rate * len(xyz)时，停止划分
+
+
+'''
+def divide_pc_by_ncut(pc_in: torch.Tensor, k_neighbors, mininum_rate,
+                      edge_calculator=None,point_estimator=None
+                      ):
+    # import toolboox.pointcloud_segmentation.cluster as cluster
+    # import toolboox.pointcloud_segmentation.bitree_cluster as bc
+    # import open3d as o3d
+    from toolbox.pointcloud_segmentation.socket_server_para import bitree_cluster_plus
+    xyz = pc_in.cpu().numpy()
+    xyz = np.array(xyz[:, :3])
+    conf = {'k_neighbors': k_neighbors, 'mininum_rate': mininum_rate}
+    MyTimer = util.timer_factory()
+    with MyTimer('bitree_cluster_plus'):
+        labels = bitree_cluster_plus(conf, xyz)    
+        indices = []
+        for i in range(len(set(labels))):
+            indices.append(torch.tensor(np.where(labels == i)[0]))
+        
+    
+    
+    with MyTimer('point estimator'):
+        # 并行执行point_estimator
+        def thread_func(i):
+            if point_estimator is not None:
+                pc_in[indices[i]] = point_estimator(pc_in[indices[i]])
+        MyTimer = util.timer_factory()
+        threads = []
+        for i in range(len(indices)):
+            t = threading.Thread(target=thread_func, args=(i,))
+            t.start()
+            threads.append(t)
+        for t in threads:
+            t.join()
+            
+    
+    with MyTimer('build_graph'): 
+        G_mutex = threading.Lock()
+
+        def cal_edge_ij_thread(i,j):
+            if edge_calculator is not None:
+                if if_pc_neibor(pc_in[indices[i]], pc_in[indices[j]], threshold):
+                    w,invw = edge_calculator(pc_in[indices[i]], pc_in[indices[j]])
+                    G_mutex.acquire()
+                    G.E.append(BiEdge(i, j, w, invw))
+                    G_mutex.release()
+            return 
+        
+        threshold = avg_min_dist(xyz, k_neighbors)
+        G = BidGraph()
+        G.V = [i for i in range(len(indices))]
+        threads = []
+        for i in range(len(indices)):
+            for j in range(i + 1, len(indices)):
+                t = threading.Thread(target=cal_edge_ij_thread, args=(i,j))
+                t.start()
+                threads.append(t)
+        for t in threads:
+            t.join()
+                
+    return G, indices
+    
+           
 
 '''
 return: indices: List[torch.Tensor] a list of indices corresponding to each part
@@ -260,7 +387,57 @@ def draw_topology(G,pc,patches,nodelabel = [],edgelabel = [],path = None):
         o3d.io.write_triangle_mesh(str(path), o3dmesh)
     return o3dmesh
 
+'''
+indices: List[torch.Tensor] a list of indices corresponding to each part
+ijk: List[torch.Tensor] a list of grid indices corresponding to each element in indices
+min_patch: join patches with less than min_path points
+after merge, each patch has at least min_patch points
 
+return:
+    new_indices: List[torch.Tensor] a list of indices corresponding to each part
+    new_ijk: List[torch.Tensor] a list of grid indices corresponding to each element in indices
+    ijk_source : List[List[torch.Tensor]] 每个patch的来源
+'''
+def lzd_merge_nodes(pts, indices, ijk, min_patch):
+    ijk = [i[0] for i in ijk] #不知道dipole作者为什么要用list包裹ijk
+    indices = [i[0] for i in indices]
+    ori_patch_cnt = len(indices) 
+    def if_neighbor(s1,s2):
+        ijk_source1 = [ijk[i] for i in s1]
+        ijk_source2 = [ijk[i] for i in s2]
+        if len(ijk_source1) == 0 or len(ijk_source2) == 0:
+            return False 
+        for i in range(len(ijk_source1)):
+            for j in range(len(ijk_source2)):
+                if (ijk_source1[i] - ijk_source2[j]).abs().sum() == 1:
+                    return True
+        return False
+    
+    ijk_source_idx = [[i] for i in range(ori_patch_cnt)] # 每个patch分配一个列表，记录其来源。最开始时，每个patch只有一个来源；合并后，每个patch可能有多个来源
+    pt_count = np.array([len(i) for i in indices])
+    
+    for i,count in enumerate(pt_count):
+        if count > min_patch:
+            continue
+        neighbor = np.array([j for j in range(ori_patch_cnt) if i!=j and if_neighbor(ijk_source_idx[i], ijk_source_idx[j])])
+        if len(neighbor) == 0:
+            continue
+        smallest_neighbor = neighbor[np.argmin(pt_count[neighbor])]
+        ijk_source_idx[smallest_neighbor] += ijk_source_idx[i]
+        ijk_source_idx[i] = []
+        pt_count[neighbor[0]] += count
+        pt_count[i] = 0
+    new_indices = []
+    new_ijk = []
+    ijk_source = []
+    for i in range(ori_patch_cnt):
+        if ijk_source_idx[i] == []:
+            continue
+        new_indices.append(torch.cat([indices[j] for j in ijk_source_idx[i]]))
+        new_ijk.append(ijk[i])
+        ijk_source.append([ijk[j] for j in ijk_source_idx[i]])
+    return new_indices, new_ijk, ijk_source
+    
 def merge_nodes(pts, indices, ijk, min_patch):
     def find_dij(i, ijk1, ijks):
         min_ijks = -1
@@ -397,7 +574,9 @@ class Transform:
             self.scale = line.norm()
             mid_points = (pc_tag[a] + pc_tag[b]) / 2
             self.center += mid_points
-
+        
+        
+        
     def apply(self, pc: torch.Tensor) -> torch.Tensor:
         pc = pc.clone()
         pc[:, :3] -= self.center[None, :]
@@ -455,4 +634,17 @@ def timer_factory():
 
     return MyTimer
 
-
+'''
+加载点云数据并转换为tensor
+'''
+import open3d as o3d
+def load_and_trans_tensor(path, device=torch.device('cuda')):
+    pc = o3d.io.read_point_cloud(path)
+    data = np.asarray(pc.points)
+    if pc.has_normals():
+        normals = np.asarray(pc.normals)
+        data = torch.tensor(np.concatenate([data, normals], axis=1), dtype=torch.float32, device=device)
+    else :
+        data = torch.tensor(data, dtype=torch.float32, device=device)
+    data, trans = Transform.trans(data)
+    return trans, data

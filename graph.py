@@ -215,7 +215,12 @@ class GraphPC:
         pcd.colors = o3d.utility.Vector3dVector(color)
         o3d.io.write_point_cloud(filename, pcd)
         
-    
+    def save_all_edge(self,path):
+        res = []
+        for edge in self.G.E:
+            self.save_egde(edge,path)
+        return res
+     
     def save_wrong_edge(self,path):
         res = []
         for edge in self.G.E:
