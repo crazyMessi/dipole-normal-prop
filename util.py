@@ -648,3 +648,14 @@ def load_and_trans_tensor(path, device=torch.device('cuda')):
         data = torch.tensor(data, dtype=torch.float32, device=device)
     data, trans = Transform.trans(data)
     return trans, data
+
+def cal_loss(pc1, pc2):
+    n1 = pc1[:, 3:]
+    n2 = pc2[:, 3:]
+    # 计算平均角度差
+    cos = (n1 * n2).sum(dim=1)
+    cos = cos.clamp(-1, 1)
+    angle = torch.acos(cos)
+    angle = angle.mean()
+    angle = angle * 180 / 3.1415926
+    return angle.item()

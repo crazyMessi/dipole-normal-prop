@@ -7,8 +7,8 @@ from graph import *
 import open3d as o3d
 
 base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop"
-pc_name = "93001_scene0037_00_vh_clean_2_gt67.ply"
-# pc_name = "flower.xyz"
+# pc_name = "scene0000_102201_gt25.ply"
+pc_name = "flower.xyz"
 
 input_pc_path = base_path + "/data/" + pc_name
 output_path = base_path + "/data/output/"
@@ -30,9 +30,15 @@ def single_dipole(pc_path):
         pc = o3d.io.read_point_cloud(pc_path)
         xyz = np.asarray(pc.points)
         input_pc = torch.tensor(xyz, dtype=torch.float32, device=device)
+        normals = np.asarray(pc.normals)
+        gt_pc = torch.tensor(torch.cat([torch.tensor(xyz, dtype=torch.float32, device=device), torch.tensor(normals, dtype=torch.float32, device=device)], dim=1), dtype=torch.float32, device=device)
     input_pc = util.estimate_normals(input_pc, max_nn=30)    
     input_pc =  _st_propagation_points(input_pc)
     util.draw_pc(input_pc, path=Path(output_path + "/simple_result.ply"))
+    # 如果有gt_pc,计算误差
+    if gt_pc.shape[1] == 6:
+        loss = util.cal_loss(gt_pc,input_pc)
+        print("loss:",loss)
 
 def graph_dipole_api(xyz_data,config):
     device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
@@ -51,7 +57,7 @@ def graph_dipole_api(xyz_data,config):
     elif config['divide_method'] == 'ncut_partition':
         G,index = util.divide_pc_by_ncut(input_pc,
                                          k_neighbors=config["k_neighbors"],
-                                         mininum_rate=config["mininum_rate"],
+                                         mininum_rate=max(config["mininum_rate"],config["min_patch"] / len(input_pc) ),
                                          edge_calculator=field_utils.field_edge_calculator,
                                          point_estimator=_st_propagation_points)
     else:   
@@ -131,6 +137,12 @@ def graph_dipole(pc_path, use_ncut=True):
     
     util.draw_pc(input_pc, path=Path(output_path + "/final_result.ply"),labels=labels)
     util.draw_topology(G,input_pc,index,path=output_path + "/topology.ply")
+    
+    # 如果有gt_pc,计算误差
+    if normals.shape[0] == xyz.shape[0]:
+        loss = util.cal_loss(gt_pc,input_pc)
+        print("loss:",loss)
+    
 
 
 if __name__ == '__main__':

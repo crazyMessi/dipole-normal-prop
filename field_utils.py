@@ -54,6 +54,9 @@ def potential(sources, means, eps=1e-5, recursive=True, max_pts=15000):
     return phi_total
 
 
+'''
+lzd修改:考虑了距离为0的点
+'''
 def field_grad(sources, means, eps=1e-5, recursive=True, max_pts=15000):
     """
     Calculate dipole field i.e. potential gradient
@@ -91,10 +94,22 @@ def field_grad(sources, means, eps=1e-5, recursive=True, max_pts=15000):
 
     p = sources[:, 3:]
     R = sources[:, None, :3] - means[None, :, :3]
-    R_unit = R / R.norm(dim=-1)[:, :, None] # r只有方向，没有大小
+    # 排除距离为0的点产生的电场
+    zero_mask = R.norm(dim=-1) == 0
+    # if zero_mask.any():
+        # print("warning: %d zero distance in field_grad" % zero_mask.sum())
+    R_unit = R.clone()
+    R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
+    R_unit[zero_mask] = 0
     E = 3 * (p[:, None, :] * R_unit).sum(dim=-1)[:, :, None] * R_unit - p[:, None, :]
+    E[zero_mask] = 0
+    
     E = E / (R.norm(dim=-1) ** 3 + eps)[:, :, None]
     E_total = E.sum(dim=0) * -1  # field=(-1)*grad -> flip the sign to get the gradient instead of -gradient
+    if E_total.isinf().any():
+        print("warning: %d inf in field_grad" % E_total.isinf().sum())
+    if E_total.isnan().any():
+        print("warning: %d nan in field_grad" % E_total.isnan().sum())
     E_total[E_total.isinf()] = 0
     E_total[E_total.isnan()] = 0
     return E_total
@@ -140,7 +155,21 @@ def self_interaction(nxyz, eps=1e-5):
     nxyz2 = nxyz[~mask]
     w,_ = field_edge_calculator(nxyz1, nxyz2)
     return w
-    
+
+
+def self_interaction_all(nxyz, eps=1e-5):
+    assert nxyz.shape[1] == 6
+    w,_ = field_edge_calculator(nxyz, nxyz)
+    return w
+
+def random_self_interaction(nxyz, eps=1e-5):
+    assert nxyz.shape[1] == 6
+    rand_flip = np.zeros(nxyz.shape[0], dtype=bool)
+    rand_flip[np.random.permutation(nxyz.shape[0])[:int(nxyz.shape[0] / 2)]] = True
+    rand_n = nxyz.clone()
+    rand_n[rand_flip, 3:] *= -1
+    w,_ = field_edge_calculator(rand_n, rand_n)
+    return w
 
 def reference_field(pc1, pc2):
     with torch.no_grad():
