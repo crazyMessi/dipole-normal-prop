@@ -658,4 +658,5 @@ def cal_loss(pc1, pc2):
     angle = torch.acos(cos)
     angle = angle.mean()
     angle = angle * 180 / 3.1415926
-    return angle.item()
+    loss = min(angle.item(), 180 - angle.item())
+    return loss

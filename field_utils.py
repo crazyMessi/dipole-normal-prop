@@ -114,6 +114,17 @@ def field_grad(sources, means, eps=1e-5, recursive=True, max_pts=15000):
     E_total[E_total.isnan()] = 0
     return E_total
 
+# def hoppe_field(sources, means, eps=1e-1):
+#     p = sources[:, 3:]
+#     R = sources[:, None, :3] - means[None, :, :3]
+#     R_norm = R.norm(dim=-1)
+#     R_unit = R / (R_norm + eps)[:, :, None]
+#     E = 3 * (p[:, None, :] * R_unit).sum(dim=-1)[:, :, None] * R_unit - p[:, None, :]
+#     E = E / (R_norm ** 3 + eps)[:, :, None]
+#     E_total = E.sum(dim=0) * -1
+#     return E_total
+
+
 def field_edge_calculator_bool(sources, means, if_save=False):
     w,invw = field_edge_calculator(sources, means, if_save)
     if w > 0:

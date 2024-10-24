@@ -8,7 +8,7 @@ import open3d as o3d
 
 base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop"
 # pc_name = "scene0000_102201_gt25.ply"
-pc_name = "flower.xyz"
+pc_name = "scene004_102202_gt75.ply"
 
 input_pc_path = base_path + "/data/" + pc_name
 output_path = base_path + "/data/output/"
@@ -39,6 +39,7 @@ def single_dipole(pc_path):
     if gt_pc.shape[1] == 6:
         loss = util.cal_loss(gt_pc,input_pc)
         print("loss:",loss)
+        return loss
 
 def graph_dipole_api(xyz_data,config):
     device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
@@ -84,7 +85,7 @@ def graph_dipole(pc_path, use_ncut=True):
         if normals.shape[0] == xyz.shape[0]:
             xyz = torch.tensor(xyz, dtype=torch.float32, device=device)
             normals = torch.tensor(normals, dtype=torch.float32, device=device)
-            gt_pc = torch.tensor(torch.cat([xyz, normals], dim=1), dtype=torch.float32, device=device)
+            gt_pc = torch.tensor(torch.cat([xyz.clone(), normals.clone()], dim=1), dtype=torch.float32, device=device)
     print(input_pc.shape)
     
     input_pc, transform = util.Transform.trans(input_pc)
@@ -142,7 +143,21 @@ def graph_dipole(pc_path, use_ncut=True):
     if normals.shape[0] == xyz.shape[0]:
         loss = util.cal_loss(gt_pc,input_pc)
         print("loss:",loss)
-    
+        return loss
+
+def run_floder(floder,exp_name):
+    pc_list = os.listdir(floder)
+    log = open("temp/%s.log" % exp_name,"w")
+    for pc in pc_list:
+        if pc[-3:] == "ply" and pc.find("gt") != -1:
+            print("processing:",pc)
+            g_loss = graph_dipole(floder + "/" + pc)
+            s_loss = single_dipole(floder + "/" + pc)
+            g_loss = str(g_loss)
+            s_loss = str(s_loss)
+            log.write(pc + "g_loss: " + g_loss + "s_loss: " + s_loss + "\n")
+            print("=============================================")
+
 
 
 if __name__ == '__main__':
