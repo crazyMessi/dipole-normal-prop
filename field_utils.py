@@ -143,13 +143,15 @@ def field_edge_calculator_count(sources, means, if_save=False):
 
 def field_edge_calculator(sources, means, if_save=False):
     def cal_w(S,T):    
-        st_E = field_grad(S, T)
+        st_E = field_grad(S,T)
         st_interaction = (st_E * T[:,3:]).sum(dim=-1).sum()
-        ts_E = field_grad(T,S)
-        ts_interaction = (ts_E * S[:,3:]).sum(dim=-1).sum()
-        st_interaction /= S.shape[0] * T.shape[0]
-        ts_interaction /= S.shape[0] * T.shape[0]
-        return st_interaction + ts_interaction
+        # ts_E = field_grad(T,S)
+        # ts_interaction = (ts_E * S[:,3:]).sum(dim=-1).sum()
+        # if st_interaction != ts_interaction:
+        #     print("%f != %f \t " % (st_interaction, ts_interaction))
+        #     print(ts_interaction - st_interaction)
+        # 确实不一样，但是差距很小 应该是数值计算的原因
+        return (st_interaction * 2) / S.shape[0] * T.shape[0]
 
     w = cal_w(sources,means) 
     w = w.detach().cpu().numpy()

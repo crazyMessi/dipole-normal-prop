@@ -154,12 +154,14 @@ class BidGraph:
         self.E.append(BiEdge(u,v,w,invw))
         return self
 
+# 用于计算指标
 class GraphPC:
-    def __init__(self,G,pc,indices,gt):
+    def __init__(self,G,pc,indices,gt,flip_status):
         self.G = G
         self.pc = pc
         self.indices = indices
         self.gt = gt
+        self.flip_status = flip_status
         assert len(pc) == len(gt)
     
     def cal_flip_acc(self):
@@ -179,10 +181,11 @@ class GraphPC:
     def is_good_edge(self,edge):
         ustatus = self.is_right_patch(edge.u)
         vstatus = self.is_right_patch(edge.v)
+        
         if edge.w > 0:
-            return ustatus == vstatus
+            return (ustatus == vstatus) ^ (self.flip_status[edge.u] != self.flip_status[edge.v])
         else:
-            return ustatus != vstatus
+            return (ustatus != vstatus) ^ (self.flip_status[edge.u] != self.flip_status[edge.v])
         
     def cal_edge_acc(self):
         good_count = 0
@@ -205,6 +208,12 @@ class GraphPC:
         # 保存边
         u = self.pc[self.indices[edge.u]].cpu().numpy()
         v = self.pc[self.indices[edge.v]].cpu().numpy()
+        
+        if self.flip_status[edge.u] == 1:
+            u[:,3:] *= -1
+        if self.flip_status[edge.v] == 1:
+            v[:,3:] *= -1
+        
         ops = np.concatenate([u,v],axis=0)
         color = np.zeros([len(ops), 3])
         color[:len(u)] = [1,0,0]

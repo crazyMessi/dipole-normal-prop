@@ -362,22 +362,29 @@ def draw_topology(G,pc,patches,nodelabel = [],edgelabel = [],path = None):
     mesh = ([], [])
     colors = []
     unque_label = list(set(nodelabel).union(set(edgelabel)))
-    label2color = {}
-    for i in range(len(unque_label)):
-        label2color[unque_label[i]] = np.random.rand(3)
+    unique_edge_label = np.unique(np.array(edgelabel))
+    unique_node_label = np.unique(np.array(nodelabel))
+    
+    node_label2color = {unique_node_label[i]: np.random.rand(3) for i in range(len(unique_node_label))}
+    edge_label2color = {unique_edge_label[i]: np.random.rand(3) for i in range(len(unique_edge_label))}
+    
+    if len(unique_node_label) == 2:
+        node_label2color = {unique_node_label[0]: np.array([1,0,0]), unique_node_label[1]: np.array([0,1,0])}
+    if len(unique_edge_label) == 2:
+        edge_label2color = {unique_edge_label[0]: np.array([1,0,0]), unique_edge_label[1]: np.array([0,1,0])}
     
     
     for i in range(len(G.V)):
         center = get_V_center(i)
         sp = get_sphere(center)
         add_topology(mesh,get_sphere(center))
-        colors += [label2color[nodelabel[i]] for _ in range(len(sp[0]))]
+        colors += [node_label2color[nodelabel[i]] for _ in range(len(sp[0]))]
     for i in range(len(G.E)):
         start = get_V_center(G.E[i].u)
         end = get_V_center(G.E[i].v)
         arrow = get_arrow(start,end)
         add_topology(mesh,arrow)
-        colors += [label2color[edgelabel[i]] for _ in range(len(arrow[0]))]    
+        colors += [edge_label2color[edgelabel[i]] for _ in range(len(arrow[0]))]    
     o3dmesh = o3d.geometry.TriangleMesh()
     o3dmesh.vertices = o3d.utility.Vector3dVector(mesh[0])
     o3dmesh.triangles = o3d.utility.Vector3iVector(mesh[1])
@@ -559,6 +566,13 @@ def estimate_normals(inputpc, max_nn=30, keep_orientation=False):
 
     return inputpc_unoriented
 
+def doing_nothing(inputpc):
+    # warning: this function does nothing
+    if inputpc.shape[1] != 6:
+        print(inputpc.shape)
+        assert False
+    print('doing nothing\n')
+    return inputpc
 
 class Transform:
     def __init__(self, pc: torch.Tensor, ttype='reg'):
@@ -649,7 +663,7 @@ def load_and_trans_tensor(path, device=torch.device('cuda')):
     data, trans = Transform.trans(data)
     return trans, data
 
-def cal_loss(pc1, pc2):
+def cal_nd_loss(pc1, pc2):
     n1 = pc1[:, 3:]
     n2 = pc2[:, 3:]
     # 计算平均角度差
@@ -660,3 +674,21 @@ def cal_loss(pc1, pc2):
     angle = angle * 180 / 3.1415926
     loss = min(angle.item(), 180 - angle.item())
     return loss
+
+def cal_90_count(pc1,pc2):
+    n1 = pc1[:, 3:]
+    n2 = pc2[:, 3:]
+    # 计算平均角度差
+    cos = (n1 * n2).sum(dim=1)
+    cos = cos.clamp(-1, 1)
+    angle = torch.acos(cos)
+    angle = angle * 180 / 3.1415926
+    count = (angle < 90).sum().item()
+    count = min(count, len(angle) - count)
+    return count
+
+def cal_loss(pc1, pc2):
+    assert pc1.shape[1] == pc2.shape[1]
+    loss = cal_nd_loss(pc1, pc2)
+    count = cal_90_count(pc1, pc2)
+    return "loss: {:.2f}, 90_count: {}/{}".format(loss, count, len(pc1))

@@ -18,14 +18,14 @@ device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() e
 def simple_estimate(xyz_data,config):
     input_pc = util.npxyz2tensor(xyz_data).to(device)
     input_pc = util.estimate_normals(input_pc, max_nn=30)
-    util.draw_pc(input_pc, path=Path("data/output/server_init.ply"))
+    # util.draw_pc(input_pc, path=Path("data/output/server_init.ply"))
     input_pc, transform = util.Transform.trans(input_pc)
     strongest_field_propagation_points(input_pc, diffuse=config['diffuse'], starting_point=0)
     if measure_mean_potential(input_pc) < 0:
         input_pc[:, 3:] *= -1
     transformed_pc = transform.inverse(input_pc)
     transformed_pc = transformed_pc.cpu().numpy()
-    util.draw_pc(transformed_pc, path=Path("data/output/server_result.ply"))
+    # util.draw_pc(transformed_pc, path=Path("data/output/server_result.ply"))
     return transformed_pc
 
 import graph_dipole
