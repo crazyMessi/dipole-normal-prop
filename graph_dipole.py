@@ -7,16 +7,16 @@ from graph import *
 import open3d as o3d
 
 base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop"
-# pc_name = "scene0000_102201_gt25.ply"
+pc_name = "scene37_0.001_gt97.ply"
 
-# input_pc_path = base_path + "/data/" + pc_name
-input_pc_path = "D:\WorkData\ipsr_explore\out\it_20_dp_10_nb_10_sd_102202_pt_10.000000\scene0004_00_vh_clean_2\graph_ipsr\lg_seg/gt67.ply"
+input_pc_path = base_path + "/data/" + pc_name
+# input_pc_path = "D:\WorkData\ipsr_explore\out\it_20_dp_10_nb_10_sd_102202_pt_10.000000\scene0004_00_vh_clean_2\graph_ipsr\lg_seg/gt0.ply"
 
 output_path = base_path + "/data/output/"
 if not Path(output_path).exists():
     Path(output_path).mkdir(parents=True)
     
-def _st_propagation_points(input_pc):
+def st_propagation_points_file(input_pc):
     input_pc, transform = util.Transform.trans(input_pc)
     field_utils.strongest_field_propagation_points(input_pc, True, starting_point=0)
     if field_utils.measure_mean_potential(input_pc) < 0:
@@ -24,7 +24,16 @@ def _st_propagation_points(input_pc):
     input_pc = transform.inverse(input_pc)
     return input_pc
 
-def single_dipole(pc_path,verbose=True, use_origin_normal=False):
+def xie_propagation_points_file(input_pc,eps = 1e-2):
+    input_pc, transform = util.Transform.trans(input_pc)
+    field_utils.xie_propagation_points(input_pc, eps,True, starting_point=0)
+    if field_utils.measure_mean_potential(input_pc) < 0:
+        input_pc[:, 3:] *= -1
+    input_pc = transform.inverse(input_pc)
+    return input_pc
+
+
+def single_propagate(pc_path,verbose=True, use_origin_normal=False, propagation_method=st_propagation_points_file):
     device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
     MyTimer = util.timer_factory()
     with MyTimer('load pc', count=False):
@@ -38,16 +47,16 @@ def single_dipole(pc_path,verbose=True, use_origin_normal=False):
     else:
         input_pc = gt_pc.clone()
     
-    input_pc =  _st_propagation_points(input_pc)
+    input_pc =  propagation_method(input_pc)
     if verbose:
-        util.draw_pc(input_pc, path=Path(output_path + "/simple_result.ply"))
+        util.draw_pc(input_pc, path=Path(output_path + "/single_%s_result.ply"% propagation_method.__name__))
     # 如果有gt_pc,计算误差
     if gt_pc.shape[1] == 6:
         loss = util.cal_loss(gt_pc,input_pc)
         print("loss:",loss)
         return loss
 
-def graph_dipole_api(xyz_data,config):
+def graph_dipole_server_api(xyz_data,config):
     device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
     input_pc = util.npxyz2tensor(xyz_data).to(device)
     input_pc = util.estimate_normals(input_pc, max_nn=config['max_nn'])
@@ -59,14 +68,14 @@ def graph_dipole_api(xyz_data,config):
                                         n_part=config["n_part"],
                                         min_patch=config["min_patch"],
                                         edge_calculator=field_utils.field_edge_calculator,
-                                        point_estimator=_st_propagation_points)
+                                        point_estimator=st_propagation_points_file)
     
     elif config['divide_method'] == 'ncut_partition':
         G,index = util.divide_pc_by_ncut(input_pc,
                                          k_neighbors=config["k_neighbors"],
                                          mininum_rate=max(config["mininum_rate"],config["min_patch"] / len(input_pc) ),
                                          edge_calculator=field_utils.field_edge_calculator,
-                                         point_estimator=_st_propagation_points)
+                                         point_estimator=st_propagation_points_file)
     else:   
         print("Error: no such divide method")
         return 
@@ -106,13 +115,13 @@ def graph_dipole(pc_path, use_ncut=True, verbose=True):
                                             n_part=10,
                                             min_patch=0,
                                             edge_calculator=field_utils.field_edge_calculator,
-                                            point_estimator=_st_propagation_points)
+                                            point_estimator=st_propagation_points_file)
         else:
             G,index = util.divide_pc_by_ncut(input_pc,
                                              k_neighbors=30,
                                              mininum_rate=1.0 / 10,
                                              edge_calculator=field_utils.field_edge_calculator,
-                                             point_estimator=_st_propagation_points)
+                                             point_estimator=st_propagation_points_file)
         
                                              
      
@@ -169,7 +178,7 @@ def run_floder(floder,exp_name):
     def single_handle(filename):
         if filename[-3:] == "ply" and filename.find("gt") != -1:
             g_loss = "nan"
-            s_loss = str(single_dipole(floder + "/" + filename,use_origin_normal=True))
+            s_loss = str(single_propagate(floder + "/" + filename,use_origin_normal=True))
             lock.acquire()
             log.write(filename + " \tg_loss: \t" + g_loss + " \ts_loss: \t" + s_loss + "\n")
             print(filename + " \tg_loss: \t" + g_loss + " \ts_loss: \t" + s_loss)
@@ -192,9 +201,12 @@ def run_floder(floder,exp_name):
 if __name__ == '__main__':
     MyTimer = util.timer_factory()
     # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/","r4")     
-    
-    with MyTimer('graph_dipole'):
-        graph_dipole(input_pc_path)
+    # with MyTimer('graph_dipole'):
+    #     graph_dipole(input_pc_path)
     print("=============================================")
-    with MyTimer('single_dipole'):
-        single_dipole(input_pc_path,use_origin_normal=True)
+    with MyTimer('xie propagation'):
+        single_propagate(input_pc_path,use_origin_normal=False,propagation_method=xie_propagation_points_file)
+        
+    with MyTimer('dipole propagation'):
+        single_propagate(input_pc_path,use_origin_normal=False,propagation_method=st_propagation_points_file)    
+    

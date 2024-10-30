@@ -30,7 +30,7 @@ def simple_estimate(xyz_data,config):
 
 import graph_dipole
 def graph_dipole_estimate(xyz_data,config):
-    return graph_dipole.graph_dipole_api(xyz_data,config)
+    return graph_dipole.graph_dipole_server_api(xyz_data,config)
 
 def hoppe_estimate(xyz_data,config):
     import open3d as o3d

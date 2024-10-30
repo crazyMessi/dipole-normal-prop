@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import util
+import pdb
 
 
 def measure_mean_potential(pc: torch.Tensor):
@@ -362,6 +363,9 @@ def strongest_field_propagation_points(pts: torch.Tensor, diffuse=False, startin
 
         # prop orientation as long as there are remaining unoriented points
         while not visited.all():
+            # if sum(visited) % 10 == 1:
+            #     # draw_field(pts[visited], pts[~visited], xie_field,times=sum(visited))
+            #     draw_field(pts[visited], pts[~visited], field_grad,times=sum(visited))
             # calculate the interaction between the field and all remaining patches
             interaction = (E[~visited] * pts[~visited, 3:]).sum(dim=-1)
 
@@ -382,3 +386,95 @@ def strongest_field_propagation_points(pts: torch.Tensor, diffuse=False, startin
             pts[:, 3:] = pts[:, 3:] * sign[:, None]
 
         pts = pts.to(device)
+        return pts
+
+
+def xie_field(source:torch.Tensor, target: torch.Tensor, eps):
+    R = source[None,:,:3] - target[:,None,:3] # M x N x 3, 表示第M个target点到第N个source点的距离向量
+    R_norm = R.norm(dim=-1) # 
+    zero_mask = R_norm == 0
+    Gussian = torch.exp(-R_norm ** 2 / (2 * eps ** 2))
+    
+    R_unit = R.clone()
+    R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
+    
+    normal_s = source[:, 3:]
+    semi_normal_s = 2 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit - normal_s
+    ref_normal_s = semi_normal_s * -1
+    return ref_normal_s * Gussian[:, :, None]
+
+
+def draw_field(source:torch.Tensor, target: torch.Tensor, field_cacular,opt = 'save', times = 0,*args, **kwargs):
+    field = field_cacular(source, target, *args, **kwargs)
+
+    # todo 不是field_grad的shape是反过来的
+    if not field_cacular.__name__ == 'field_grad':
+        field = field.sum(dim=-2)
+    import open3d as o3d
+    pc = o3d.geometry.PointCloud()
+    xyz = np.concatenate([target.cpu().numpy(), source.cpu().numpy()], axis=0)
+    xyz = np.asarray(xyz, dtype=np.float64)
+    xyz[:len(target), 3:] = field.cpu().numpy()
+    pc.points = o3d.utility.Vector3dVector(xyz[:, :3])
+    pc.normals = o3d.utility.Vector3dVector(xyz[:, 3:])
+    colors = np.zeros_like(xyz[:, :3])
+    colors[:len(target), 1] = 1
+    colors[len(target):, 0] = 1
+    colors = np.asarray(colors, dtype=np.float64)
+    pc.colors = o3d.utility.Vector3dVector(colors)
+    
+    if opt == 'save':
+        import os
+        func_name = field_cacular.__name__
+        floder = "temp/field/"
+        os.makedirs(floder, exist_ok=True)
+        path = '%s_%d.ply' % (func_name, times)
+        o3d.io.write_point_cloud(floder + path, pc)
+    elif opt == 'show':
+        o3d.visualization.draw_geometries([pc])
+    else:
+        print("opt error")
+    
+
+
+# intersaction[j] = (n - 2 r * cos(theta) )* n * gaussian = n - 2 r * (n_norm - n * r) * gaussian
+# source: N x 6, target: M x 6 
+# eps: 高斯核参数 越大越平滑
+# return: M x N
+def xie_intersaction(source: torch.Tensor, target: torch.Tensor, eps):
+    ref_normal_s = xie_field(source, target, eps=eps)
+    intersaction  = ( ref_normal_s * target[:,None, 3:] ).sum(dim=-1)
+    if intersaction.isnan().any():
+        print("warning: %d nan in xie_intersaction" % intersaction.isnan().sum())
+    if intersaction.isinf().any():
+        print("warning: %d inf in xie_intersaction" % intersaction.isinf().sum())
+    intersaction[intersaction.isnan()] = 0
+    intersaction[intersaction.isinf()] = 0
+    return intersaction
+    
+    
+
+def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point=0):
+    device = pts.device
+    indx = torch.arange(pts.shape[0]).to(pts.device)
+    visited = torch.zeros_like(pts[:, 0]).bool()
+    interactions = torch.zeros(len(pts)).to(pts.device) # 当前visited点对所有点的影响。shape: N*1
+    visited[starting_point] = True
+    while not visited.all():
+        interactions[~visited] += xie_intersaction(pts[visited], pts[~visited], eps=eps).sum(dim=-1)
+        # if sum(visited) % 10 == 1:
+        #     draw_field(pts[visited], pts[~visited], xie_field, eps=eps,times=sum(visited))
+            # draw_field(pts[visited], pts[~visited], field_grad, eps=eps,times=sum(visited))
+            
+        pts_index = indx[~visited][interactions[~visited].abs().argmax()]
+        if interactions[pts_index] < 0:
+            pts[pts_index, 3:] *= -1
+        visited[pts_index] = True
+    
+    if diffuse:
+        interactions = xie_intersaction(pts, pts, eps=eps).sum(dim=-1)
+        sign = (interactions > 0).float() * 2 - 1
+        pts[:, 3:] = pts[:, 3:] * sign[:, None]
+    pts = pts.to(device)
+    
+        
