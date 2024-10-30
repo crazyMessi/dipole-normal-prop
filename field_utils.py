@@ -363,9 +363,8 @@ def strongest_field_propagation_points(pts: torch.Tensor, diffuse=False, startin
 
         # prop orientation as long as there are remaining unoriented points
         while not visited.all():
-            # if sum(visited) % 10 == 1:
-            #     # draw_field(pts[visited], pts[~visited], xie_field,times=sum(visited))
-            #     draw_field(pts[visited], pts[~visited], field_grad,times=sum(visited))
+            if torch.sum(visited) == 1:
+                draw_field(pts[visited], pts[~visited],field_grad,times=sum(visited))
             # calculate the interaction between the field and all remaining patches
             interaction = (E[~visited] * pts[~visited, 3:]).sum(dim=-1)
 
@@ -397,8 +396,7 @@ def xie_field(source:torch.Tensor, target: torch.Tensor, eps):
     
     R_unit = R.clone()
     R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
-    
-    normal_s = source[:, 3:]
+    normal_s = source[:, 3:] 
     semi_normal_s = 2 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit - normal_s
     ref_normal_s = semi_normal_s * -1
     return ref_normal_s * Gussian[:, :, None]
@@ -462,11 +460,11 @@ def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point
     visited[starting_point] = True
     while not visited.all():
         interactions[~visited] += xie_intersaction(pts[visited], pts[~visited], eps=eps).sum(dim=-1)
-        # if sum(visited) % 10 == 1:
-        #     draw_field(pts[visited], pts[~visited], xie_field, eps=eps,times=sum(visited))
+        if torch.sum(visited) % 10 == 1:
+            draw_field(pts[visited], pts[~visited], xie_field, eps=eps,times=sum(visited))
             # draw_field(pts[visited], pts[~visited], field_grad, eps=eps,times=sum(visited))
             
-        pts_index = indx[~visited][interactions[~visited].abs().argmax()]
+        pts_index = indx[~visited][interactions[~visited].argmax()]
         if interactions[pts_index] < 0:
             pts[pts_index, 3:] *= -1
         visited[pts_index] = True

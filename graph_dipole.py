@@ -10,7 +10,7 @@ base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-p
 pc_name = "scene37_0.001_gt97.ply"
 
 input_pc_path = base_path + "/data/" + pc_name
-# input_pc_path = "D:\WorkData\ipsr_explore\out\it_20_dp_10_nb_10_sd_102202_pt_10.000000\scene0004_00_vh_clean_2\graph_ipsr\lg_seg/gt0.ply"
+input_pc_path = "D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/scene0054_102201_it_10_gt91.ply"
 
 output_path = base_path + "/data/output/"
 if not Path(output_path).exists():
@@ -168,6 +168,33 @@ def graph_dipole(pc_path, use_ncut=True, verbose=True):
 import threading
 
 
+def run_file(file) -> str:
+    MyTimer = util.timer_factory() 
+    with MyTimer('xie dipole'):
+        gt_xie_loss = str(single_propagate(file,use_origin_normal=True,propagation_method=xie_propagation_points_file))
+        print("\n")
+        
+        xie_loss = str(single_propagate(file,use_origin_normal=False,propagation_method=xie_propagation_points_file))
+        print("\n")
+        
+    print("\n")
+        
+    with MyTimer('st dipole'):
+        gt_dipole_loss = str(single_propagate(file,use_origin_normal=True,propagation_method=st_propagation_points_file))
+        print("\n")
+        
+        dipole_loss = str(single_propagate(file,use_origin_normal=False,propagation_method=st_propagation_points_file))
+        print("\n")
+        
+
+    printmsg = "file:%s\t" % file
+    printmsg += "gt_xie_loss:%s\t" % gt_xie_loss
+    printmsg += "xie_loss:%s\t" % xie_loss
+    printmsg += "gt_dipole_loss:%s\t" % gt_dipole_loss
+    printmsg += "dipole_loss:%s\t" % dipole_loss
+    return printmsg
+
+
 def run_floder(floder,exp_name):
     pc_list = os.listdir(floder)
     log = open("temp/%s.log" % exp_name,"w")
@@ -177,12 +204,11 @@ def run_floder(floder,exp_name):
 
     def single_handle(filename):
         if filename[-3:] == "ply" and filename.find("gt") != -1:
-            g_loss = "nan"
-            s_loss = str(single_propagate(floder + "/" + filename,use_origin_normal=True))
+            msg = run_file(floder + filename)
             lock.acquire()
-            log.write(filename + " \tg_loss: \t" + g_loss + " \ts_loss: \t" + s_loss + "\n")
-            print(filename + " \tg_loss: \t" + g_loss + " \ts_loss: \t" + s_loss)
             print("=============================================")
+            print(msg)
+            log.write(msg + "\n")
             lock.release()
 
     for pc in pc_list:
@@ -197,16 +223,12 @@ def run_floder(floder,exp_name):
     log.close()
 
 
-
 if __name__ == '__main__':
     MyTimer = util.timer_factory()
-    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/","r4")     
+    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/","xie_dipole")  
+    run_file(input_pc_path)
+       
     # with MyTimer('graph_dipole'):
     #     graph_dipole(input_pc_path)
-    print("=============================================")
-    with MyTimer('xie propagation'):
-        single_propagate(input_pc_path,use_origin_normal=False,propagation_method=xie_propagation_points_file)
-        
-    with MyTimer('dipole propagation'):
-        single_propagate(input_pc_path,use_origin_normal=False,propagation_method=st_propagation_points_file)    
+    # run_file(input_pc_path) 
     
