@@ -6,34 +6,34 @@ import torch
 from graph import *
 import open3d as o3d
 
-base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop"
-pc_name = "scene37_0.001_gt97.ply"
+base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop/"
+pc_name = "scene0000_gt122.ply"
 
-input_pc_path = base_path + "/data/" + pc_name
-input_pc_path = "D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/scene0054_102201_it_10_gt91.ply"
+input_pc_path = base_path + "/data/hard/" + pc_name
+# input_pc_path = "D:\WorkData\ipsr_explore\input\someseg/sceneNN_41_380dist.ply"
 
 output_path = base_path + "/data/output/"
 if not Path(output_path).exists():
     Path(output_path).mkdir(parents=True)
-    
-def st_propagation_points_file(input_pc):
+
+def propagate_points_file(input_pc,propagate_func, *args, **kwargs):
     input_pc, transform = util.Transform.trans(input_pc)
-    field_utils.strongest_field_propagation_points(input_pc, True, starting_point=0)
+    propagate_func(input_pc, *args, **kwargs)
     if field_utils.measure_mean_potential(input_pc) < 0:
         input_pc[:, 3:] *= -1
     input_pc = transform.inverse(input_pc)
     return input_pc
 
-def xie_propagation_points_file(input_pc,eps = 1e-2):
-    input_pc, transform = util.Transform.trans(input_pc)
-    field_utils.xie_propagation_points(input_pc, eps,True, starting_point=0)
-    if field_utils.measure_mean_potential(input_pc) < 0:
-        input_pc[:, 3:] *= -1
-    input_pc = transform.inverse(input_pc)
-    return input_pc
+def st_propagation_points_file(input_pc,verbose=True):
+    return propagate_points_file(input_pc,field_utils.strongest_field_propagation_points, diffuse=True, starting_point=0,verbose=verbose)
 
+def xie_propagation_points_file(input_pc,eps = 1e-2,verbose=True):
+    return propagate_points_file(input_pc,field_utils.xie_propagation_points, eps=eps, diffuse=True, starting_point=0,verbose=verbose)
 
-def single_propagate(pc_path,verbose=True, use_origin_normal=False, propagation_method=st_propagation_points_file):
+def xie_tree_propagation_points_file(input_pc,eps = 1e-2,verbose=True):
+    return propagate_points_file(input_pc,field_utils.xie_propagation_points_onbfstree, eps=eps, diffuse=True, starting_point=0,verbose=verbose)
+
+def single_propagate_file(pc_path,verbose=True, use_origin_normal=False, propagation_method=st_propagation_points_file,*args, **kwargs):
     device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
     MyTimer = util.timer_factory()
     with MyTimer('load pc', count=False):
@@ -47,7 +47,7 @@ def single_propagate(pc_path,verbose=True, use_origin_normal=False, propagation_
     else:
         input_pc = gt_pc.clone()
     
-    input_pc =  propagation_method(input_pc)
+    input_pc =  propagation_method(input_pc,verbose=verbose,*args, **kwargs)
     if verbose:
         util.draw_pc(input_pc, path=Path(output_path + "/single_%s_result.ply"% propagation_method.__name__))
     # 如果有gt_pc,计算误差
@@ -169,29 +169,37 @@ import threading
 
 
 def run_file(file) -> str:
+    printmsg = "file:%s\t" % file
     MyTimer = util.timer_factory() 
+    
+    # with MyTimer('xie on tree'):
+    #     gt_tree_xie_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=xie_tree_propagation_points_file))
+    #     print("\n")
+    #     tree_xie_loss = str(single_propagate_file(file,use_origin_normal=False,propagation_method=xie_tree_propagation_points_file))
+    #     print("\n")        
+    #     printmsg += "gt_tree_xie_loss:%s\t" % gt_tree_xie_loss
+    #     printmsg += "tree_xie_loss:%s\t" % tree_xie_loss
+    # print("\n")
+    
     with MyTimer('xie dipole'):
-        gt_xie_loss = str(single_propagate(file,use_origin_normal=True,propagation_method=xie_propagation_points_file))
+        gt_xie_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=xie_propagation_points_file))
         print("\n")
         
-        xie_loss = str(single_propagate(file,use_origin_normal=False,propagation_method=xie_propagation_points_file))
+        xie_loss = str(single_propagate_file(file,use_origin_normal=False,propagation_method=xie_propagation_points_file))
         print("\n")
-        
+    
+        printmsg += "gt_xie_loss:%s\t" % gt_xie_loss
+        printmsg += "xie_loss:%s\t" % xie_loss
     print("\n")
         
     with MyTimer('st dipole'):
-        gt_dipole_loss = str(single_propagate(file,use_origin_normal=True,propagation_method=st_propagation_points_file))
+        gt_dipole_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=st_propagation_points_file))
         print("\n")
         
-        dipole_loss = str(single_propagate(file,use_origin_normal=False,propagation_method=st_propagation_points_file))
+        dipole_loss = str(single_propagate_file(file,use_origin_normal=False,propagation_method=st_propagation_points_file))
         print("\n")
-        
-
-    printmsg = "file:%s\t" % file
-    printmsg += "gt_xie_loss:%s\t" % gt_xie_loss
-    printmsg += "xie_loss:%s\t" % xie_loss
-    printmsg += "gt_dipole_loss:%s\t" % gt_dipole_loss
-    printmsg += "dipole_loss:%s\t" % dipole_loss
+        printmsg += "gt_dipole_loss:%s\t" % gt_dipole_loss
+        printmsg += "dipole_loss:%s\t" % dipole_loss
     return printmsg
 
 
@@ -225,7 +233,7 @@ def run_floder(floder,exp_name):
 
 if __name__ == '__main__':
     MyTimer = util.timer_factory()
-    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/","xie_dipole")  
+    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/hard/","hard")  
     run_file(input_pc_path)
        
     # with MyTimer('graph_dipole'):

@@ -350,7 +350,7 @@ def strongest_field_propagation(pts, patches, all_patches, diffuse=False, weight
 
 
 # 单独使用
-def strongest_field_propagation_points(pts: torch.Tensor, diffuse=False, starting_point=0):
+def strongest_field_propagation_points(pts: torch.Tensor, diffuse=False, starting_point=0,verbose = False):
         device = pts.device
         pts = pts.cuda()
         indx = torch.arange(pts.shape[0]).to(pts.device)
@@ -363,7 +363,7 @@ def strongest_field_propagation_points(pts: torch.Tensor, diffuse=False, startin
 
         # prop orientation as long as there are remaining unoriented points
         while not visited.all():
-            if torch.sum(visited) == 1:
+            if verbose and torch.sum(visited) == 1:
                 draw_field(pts[visited], pts[~visited],field_grad,times=sum(visited))
             # calculate the interaction between the field and all remaining patches
             interaction = (E[~visited] * pts[~visited, 3:]).sum(dim=-1)
@@ -392,7 +392,15 @@ def xie_field(source:torch.Tensor, target: torch.Tensor, eps):
     R = source[None,:,:3] - target[:,None,:3] # M x N x 3, 表示第M个target点到第N个source点的距离向量
     R_norm = R.norm(dim=-1) # 
     zero_mask = R_norm == 0
-    Gussian = torch.exp(-R_norm ** 2 / (2 * eps ** 2))
+    normal_s = source[:, 3:] 
+    horizental_distant = torch.cross(normal_s[None,:,:], R).norm(dim=-1)  / normal_s.norm(dim=-1)[None,:]
+    Gussian = torch.zeros_like(R_norm)
+    # h_zero_mask = horizental_distant == 0
+    # Gussian = torch.exp(-horizental_distant ** 2 / (2 * eps ** 2))
+    # Gussian = torch.exp(-R_norm ** 2 / (2 * eps ** 2)) * 100
+    # Gussian[~h_zero_mask] = Gussian[~h_zero_mask] / (horizental_distant[~h_zero_mask] ** 3)
+    # Gussian[~zero_mask] = Gussian[~zero_mask] / (R_norm[~zero_mask] ** 3)
+    Gussian[~zero_mask] = torch.ones_like(Gussian[~zero_mask])/ ((R_norm[~zero_mask] + horizental_distant[~zero_mask]) ** 3)
     
     R_unit = R.clone()
     R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
@@ -449,10 +457,31 @@ def xie_intersaction(source: torch.Tensor, target: torch.Tensor, eps):
     intersaction[intersaction.isnan()] = 0
     intersaction[intersaction.isinf()] = 0
     return intersaction
-    
+
+
+def xie_distance(source: torch.Tensor, target: torch.Tensor, eps):
+    R = source[None,:,:3] - target[:,None,:3] 
+    xie_distance = source[None,:,3:] * R
+    xie_distance = xie_distance.norm(dim=-1).sum(dim=-1)
+    return xie_distance
     
 
-def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point=0):
+
+
+
+def xie_propagation_points_plus(pts: torch.Tensor, eps, diffuse=False, starting_point=0):
+    pts = strongest_field_propagation_points(pts)
+    return xie_propagation_points(pts, eps, diffuse, starting_point=starting_point)
+
+def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False):
+    def diffuse_field(pts, eps,verbose = False,times = 0):
+        interactions = xie_intersaction(pts, pts, eps=eps).sum(dim=-1)
+        sign = (interactions > 0).float() * 2 - 1
+        pts[:, 3:] = pts[:, 3:] * sign[:, None]
+        if verbose:
+            print("%d flipped in diffuse" % (sign == -1).sum()) 
+            draw_field(pts, pts, xie_field, eps=eps, times=times)  
+    
     device = pts.device
     indx = torch.arange(pts.shape[0]).to(pts.device)
     visited = torch.zeros_like(pts[:, 0]).bool()
@@ -460,9 +489,9 @@ def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point
     visited[starting_point] = True
     while not visited.all():
         interactions[~visited] += xie_intersaction(pts[visited], pts[~visited], eps=eps).sum(dim=-1)
-        if torch.sum(visited) % 10 == 1:
+        if torch.sum(visited) % 10 == 1 and verbose:
             draw_field(pts[visited], pts[~visited], xie_field, eps=eps,times=sum(visited))
-            # draw_field(pts[visited], pts[~visited], field_grad, eps=eps,times=sum(visited))
+            draw_field(pts[visited], pts[~visited], field_grad, eps=eps,times=sum(visited))
             
         pts_index = indx[~visited][interactions[~visited].argmax()]
         if interactions[pts_index] < 0:
@@ -470,9 +499,38 @@ def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point
         visited[pts_index] = True
     
     if diffuse:
+        diffuse_field(pts, eps)
+    pts = pts.to(device)
+
+
+def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False,verbose=False):
+    def diffuse_field(pts, eps,verbose = False,times = 0):
         interactions = xie_intersaction(pts, pts, eps=eps).sum(dim=-1)
         sign = (interactions > 0).float() * 2 - 1
         pts[:, 3:] = pts[:, 3:] * sign[:, None]
+        if verbose:
+            print("%d flipped in diffuse" % (sign == -1).sum()) 
+            draw_field(pts, pts, xie_field, eps=eps, times=times)  
+    
+    device = pts.device
+    visited = torch.zeros_like(pts[:, 0]).bool()
+    interactions = torch.zeros(len(pts)).to(pts.device) # 当前visited点对所有点的影响。shape: N*1
+    for i in order:
+        visited[i] = True
+        interactions[~visited] += xie_intersaction(pts[visited], pts[~visited], eps=eps).sum(dim=-1)
+        if verbose and torch.sum(visited) % 10 == 1 :
+            draw_field(pts[visited], pts[~visited], xie_field, eps=eps,times=sum(visited))
+        if interactions[i] < 0:
+            pts[i, 3:] *= -1
+        
+    if diffuse:
+        diffuse_field(pts, eps)
     pts = pts.to(device)
     
-        
+def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1):
+    import graph
+    xyz = pts[:,:3]
+    G = graph.getLinkedListGraphfromPc(np.asarray(xyz.cpu()),k,threshold=treshold)
+    order = G.get_bfs_route(starting_point)
+    xie_propagation_points_in_order(pts, eps, order, diffuse,verbose)
+    

@@ -28,6 +28,17 @@ def simple_estimate(xyz_data,config):
     # util.draw_pc(transformed_pc, path=Path("data/output/server_result.ply"))
     return transformed_pc
 
+def xie_propagation(xyz_data,config):
+    input_pc = util.npxyz2tensor(xyz_data).to(device)
+    input_pc = util.estimate_normals(input_pc, max_nn=config['max_nn'])
+    input_pc, transform = util.Transform.trans(input_pc)
+    xie_propagation_points(input_pc, eps=config['eps'], diffuse=config['diffuse'], starting_point=0)
+    if measure_mean_potential(input_pc) < 0:
+        input_pc[:, 3:] *= -1
+    transformed_pc = transform.inverse(input_pc)
+    transformed_pc = transformed_pc.cpu().numpy()
+    return transformed_pc
+
 import graph_dipole
 def graph_dipole_estimate(xyz_data,config):
     return graph_dipole.graph_dipole_server_api(xyz_data,config)
@@ -93,6 +104,9 @@ def handle_client(conn, addr):
                 result = transformed_pc
             elif req['function_name'] == 'graph_dipole_estimate':
                 transformed_pc = graph_dipole_estimate(xyz_data, req['function_config'])
+                result = transformed_pc
+            elif req['function_name'] == 'xie_propagation':
+                transformed_pc = xie_propagation(xyz_data, req['function_config'])
                 result = transformed_pc
             else:
                 print(f"Unknown method: {req['function_name']}")

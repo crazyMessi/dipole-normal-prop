@@ -1,11 +1,15 @@
-import field_utils
-import util
 import numpy as np
 import gurobipy as gp
-
+import heapq
 import os
 import open3d as o3d
 import numpy as np
+'''
+used by those:
+- graph_dipole.py
+
+'''
+
 '''
     Parameters:
     - mesh: A mesh represented as a tuple (vertices, faces), where vertices is a list of 3D points and faces is a list of vertex indices for each face
@@ -249,6 +253,85 @@ class GraphPC:
         print("edge acc: ",self.cal_edge_acc())
         return 0
 
+'''
+邻接链表表示的图
+'''
+class LinkedListGraph:
+    
+    ''' 
+    只存储了end的带权边。专门用于邻接链表表示的图
+    '''
+    class halfEdge:
+        def __init__(self,v,w):
+            self.v = v
+            self.w = w
+            
+        def __eq__(self,other):
+            return self.v == other.v 
+        
+        def __hash__(self):
+            return self.v
+        
+        def __lt__(self,other):
+            return self.w < other.w
+        
+        def __rt__(self,other):
+            return self.w > other.w
+    
+    def __init__(self,node_num):
+        self.node_num = node_num
+        self.edges = [set() for i in range(node_num)]
+    
+    def add_edge(self,u,v,w):
+        self.edges[u].add(LinkedListGraph.halfEdge(v,w))
+    
+    '''
+    得到从start开始的bfs遍历的顺序
+    '''
+    def get_bfs_route(self,start):
+        res = []
+        visited = [False for i in range(self.node_num)]
+        q = [start]
+        visited[start] = True
+        while len(q) > 0:
+            u = q.pop(0)
+            res.append(u)
+            for edge in self.edges[u]:
+                if not visited[edge.v]:
+                    visited[edge.v] = True
+                    q.append(edge.v)
+        return res
+    
+    def get_weighted_bfs_route(self,start):
+        res = []
+        visited = [False for i in range(self.node_num)]
+        q = []
+        heapq.heappush(q,(0,start))
+        visited[start] = True
+        while len(q) > 0:
+            _,u = heapq.heappop(q)
+            res.append(u)
+            for edge in self.edges[u]:
+                if not visited[edge.v]:
+                    visited[edge.v] = True
+                    heapq.heappush(q,(edge.w,edge.v))
+        return res    
+
+def getLinkedListGraphfromPc(xyz:np.ndarray,k:int = 10,threshold:float = 0.1):
+    # 建树
+    points = o3d.utility.Vector3dVector(xyz.copy())
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = points
+    tree = o3d.geometry.KDTreeFlann(pcd)
+    n = len(points)
+    G = LinkedListGraph(n)
+    for i in range(n):
+        [k, idx, _] = tree.search_knn_vector_3d(points[i], k)
+        for j in range(k):
+            if idx[j] != i:
+                G.add_edge(i,idx[j],np.linalg.norm(points[i] - points[idx[j]]))    
+    return G
+    
 
 '''
 计算一个指派的weight_sum
