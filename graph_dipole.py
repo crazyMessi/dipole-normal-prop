@@ -10,7 +10,7 @@ base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-p
 pc_name = "scene0000_gt122.ply"
 
 input_pc_path = base_path + "/data/hard/" + pc_name
-# input_pc_path = "D:\WorkData\ipsr_explore\input\someseg/SceneNN_076_res334.ply"
+# input_pc_path = "D:\WorkData\ipsr_explore\input\someseg/sceneNN_41_366dist.ply"
 
 output_path = base_path + "/data/output/"
 
@@ -175,7 +175,8 @@ import threading
 
 
 def run_file(file) -> str:
-    printmsg = "file:%s\t" % file
+    head = "filename,"
+    printmsg = "%s," % file
     MyTimer = util.timer_factory() 
     
     with MyTimer('xie on tree'):
@@ -183,8 +184,8 @@ def run_file(file) -> str:
         # print("\n")
         tree_xie_loss = str(single_propagate_file(file,use_origin_normal=False,propagation_method=xie_tree_propagation_points_file,times=5))
         print("\n")        
-        # printmsg += "gt_tree_xie_loss:%s\t" % gt_tree_xie_loss
-        printmsg += "tree_xie_loss:%s\t" % tree_xie_loss
+        head += "tree_xie_loss," 
+        printmsg += "%s," % tree_xie_loss
     print("\n")
     
     with MyTimer('xie dipole'):
@@ -194,8 +195,8 @@ def run_file(file) -> str:
         xie_loss = str(single_propagate_file(file,use_origin_normal=False,propagation_method=xie_propagation_points_file))
         print("\n")
     
-        # printmsg += "gt_xie_loss:%s\t" % gt_xie_loss
-        printmsg += "xie_loss:%s\t" % xie_loss
+        head += "xie_loss,"
+        printmsg += "%s," % xie_loss
     print("\n")
         
     with MyTimer('st dipole'):
@@ -204,9 +205,10 @@ def run_file(file) -> str:
         
         dipole_loss = str(single_propagate_file(file,use_origin_normal=False,propagation_method=st_propagation_points_file))
         print("\n")
-        # printmsg += "gt_dipole_loss:%s\t" % gt_dipole_loss
-        printmsg += "dipole_loss:%s\t" % dipole_loss
-    return printmsg
+        
+        head += "dipole_loss"
+        printmsg += "%s," % dipole_loss
+    return printmsg,head
 
 
 def run_floder(floder,exp_name):
