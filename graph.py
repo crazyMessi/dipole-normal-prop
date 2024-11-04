@@ -290,9 +290,10 @@ class LinkedListGraph:
     '''
     def get_bfs_route(self,start):
         res = []
-        visited = [False for i in range(self.node_num)]
+        visited = np.array([False for i in range(self.node_num)])
         q = [start]
         visited[start] = True
+        unit = 1
         while len(q) > 0:
             u = q.pop(0)
             res.append(u)
@@ -300,14 +301,26 @@ class LinkedListGraph:
                 if not visited[edge.v]:
                     visited[edge.v] = True
                     q.append(edge.v)
+            if len(q) == 0:
+                if visited.all() == True:
+                    break
+                # 将第一个未访问的节点加入
+                idx = np.where(visited == False)[0]
+                q.append(idx[0])
+                visited[idx[0]] = True
+                unit += 1
+        if unit != 1:
+            print("bfs warning::unit= ",unit)
+        
         return res
     
     def get_weighted_bfs_route(self,start):
         res = []
-        visited = [False for i in range(self.node_num)]
+        visited = np.array([False for i in range(self.node_num)])
         q = []
         heapq.heappush(q,(0,start))
         visited[start] = True
+        unit = 1
         while len(q) > 0:
             _,u = heapq.heappop(q)
             res.append(u)
@@ -315,6 +328,16 @@ class LinkedListGraph:
                 if not visited[edge.v]:
                     visited[edge.v] = True
                     heapq.heappush(q,(edge.w,edge.v))
+            if len(q) == 0:
+                if visited.any() == True:
+                    break
+                # 将第一个未访问的节点加入
+                idx = np.where(visited == False)[0]
+                q.append(idx[0])
+                visited[idx[0]] = True
+                unit += 1
+        if unit != 1:
+            print("bfs warning::unit= ",unit)
         return res    
 
 def getLinkedListGraphfromPc(xyz:np.ndarray,k:int = 10,threshold:float = 0.1):

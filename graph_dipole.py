@@ -7,7 +7,8 @@ from graph import *
 import open3d as o3d
 
 base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-prop/"
-pc_name = "scene0000_gt122.ply"
+# pc_name = "scene0000_gt122.ply"
+pc_name = "scene37_0.001_gt97.ply"
 
 input_pc_path = base_path + "/data/hard/" + pc_name
 # input_pc_path = "D:\WorkData\ipsr_explore\input\someseg/sceneNN_41_366dist.ply"
@@ -217,11 +218,15 @@ def run_floder(floder,exp_name):
     # lock
     lock = threading.Lock()
     threads = []
+    head = False
 
     def single_handle(filename):
         if filename[-3:] == "ply" and filename.find("gt") != -1:
-            msg = run_file(floder + filename)
+            msg,head = run_file(floder + filename)
             lock.acquire()
+            if not head:
+                log.write(head + "\n")
+                head = True
             print("=============================================")
             print(msg)
             log.write(msg + "\n")
@@ -241,8 +246,8 @@ def run_floder(floder,exp_name):
 
 if __name__ == '__main__':
     MyTimer = util.timer_factory()
-    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/hard/","hard")  
     run_file(input_pc_path)
+    run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/hard/","hard")  
        
     # with MyTimer('graph_dipole'):
     #     graph_dipole(input_pc_path)
