@@ -502,7 +502,9 @@ def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point
         diffuse_field(pts, eps)
     pts = pts.to(device)
 
-
+'''
+return bool tensor, True means has flipped
+'''
 def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False,verbose=False):
     def diffuse_field(pts, eps,verbose = False,times = 0):
         interactions = xie_intersaction(pts, pts, eps=eps).sum(dim=-1)
@@ -526,11 +528,51 @@ def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False
     if diffuse:
         diffuse_field(pts, eps)
     pts = pts.to(device)
+    return interactions<0
     
-def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1):
+'''
+以BFS的顺序传播
+times: 传播次数;最后投票;默认为1,即只从starting_point开始传播一次;如果times>1,则随机从pts中再选择times个点作为starting_point。必须是正奇数
+k: 生成图的k近邻
+treshold: 生成图的treshold
+每次flip均与第一次flip对齐(TODO: 这个策略可以优化)
+'''
+def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1,times = 1):
+    assert times % 2 == 1 and times > 0
     import graph
-    xyz = pts[:,:3]
-    G = graph.getLinkedListGraphfromPc(np.asarray(xyz.cpu()),k,threshold=treshold)
-    order = G.get_bfs_route(starting_point)
-    xie_propagation_points_in_order(pts, eps, order, diffuse,verbose)
+    starting_points = [starting_point]
+    while len(np.unique(starting_points)) < times:
+        t = np.random.randint(0,pts.shape[0])
+        if t not in starting_points:
+            starting_points.append(t)
+    
+    xyz = pts[:,:3].cpu().numpy()
+    G = graph.getLinkedListGraphfromPc(xyz, k, treshold)
+    
+    def need_align(order1,order2):
+        if len(order1) != len(order2):
+            print("order1 and order2 length not equal")
+            return    
+        return sum(order1 == order2) > len(order1)/2
+    
+    st = starting_points[0]
+    order = G.get_bfs_route(st)        
+    flipstatus = xie_propagation_points_in_order(pts.clone(), eps, order, diffuse,verbose)
+    cnts = torch.zeros(len(pts),dtype=torch.int).to(pts.device)
+    cnts[flipstatus] += 1
+    cnts[~flipstatus] -= 1
+    for i in range(times-1):
+        st = starting_points[i]
+        order = G.get_bfs_route(st)        
+        t_flipstatus = xie_propagation_points_in_order(pts.clone(), eps, order, diffuse,verbose)
+        if need_align(flipstatus,t_flipstatus):
+            t_flipstatus = ~t_flipstatus
+        cnts[t_flipstatus] += 1
+        cnts[~t_flipstatus] -= 1
+    flipstatus = cnts > 0
+    for i in range(len(flipstatus)):
+        if flipstatus[i]:
+            pts[i,3:] *= -1
+    return flipstatus
+        
     
