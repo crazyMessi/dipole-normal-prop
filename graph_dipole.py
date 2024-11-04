@@ -10,7 +10,7 @@ base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-p
 pc_name = "scene0000_gt122.ply"
 
 input_pc_path = base_path + "/data/hard/" + pc_name
-# input_pc_path = "D:\WorkData\ipsr_explore\input\someseg/sceneNN_41_380dist.ply"
+input_pc_path = "D:\WorkData\ipsr_explore\input\someseg/SceneNN_076_res334.ply"
 
 output_path = base_path + "/data/output/"
 
@@ -239,8 +239,8 @@ def run_floder(floder,exp_name):
 
 if __name__ == '__main__':
     MyTimer = util.timer_factory()
-    run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/hard/","hard")  
-    # run_file(input_pc_path)
+    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/hard/","hard")  
+    run_file(input_pc_path)
        
     # with MyTimer('graph_dipole'):
     #     graph_dipole(input_pc_path)

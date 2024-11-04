@@ -506,28 +506,34 @@ def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point
 return bool tensor, True means has flipped
 '''
 def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False,verbose=False):
-    def diffuse_field(pts, eps,verbose = False,times = 0):
-        interactions = xie_intersaction(pts, pts, eps=eps).sum(dim=-1)
-        sign = (interactions > 0).float() * 2 - 1
-        pts[:, 3:] = pts[:, 3:] * sign[:, None]
-        if verbose:
-            print("%d flipped in diffuse" % (sign == -1).sum()) 
-            draw_field(pts, pts, xie_field, eps=eps, times=times)  
-    
-    device = pts.device
-    visited = torch.zeros_like(pts[:, 0]).bool()
-    interactions = torch.zeros(len(pts)).to(pts.device) # 当前visited点对所有点的影响。shape: N*1
-    for i in order:
-        visited[i] = True
-        interactions[~visited] += xie_intersaction(pts[visited], pts[~visited], eps=eps).sum(dim=-1)
-        if verbose and torch.sum(visited) % 10 == 1 :
-            draw_field(pts[visited], pts[~visited], xie_field, eps=eps,times=sum(visited))
-        if interactions[i] < 0:
-            pts[i, 3:] *= -1
+    MyTimer = util.timer_factory()
+    T,N = order.shape
+    order = torch.tensor(order).to(pts.device)
+    order.data = order.data.long()
+    with MyTimer("prepare"):
+        interactions = torch.zeros(T,N).to(pts.device) # 当前visited点对所有点的影响。shape: T x N
+        interaction_mat = xie_intersaction(pts, pts, eps=eps) # N x N, 表示第i个点受到的来自第j个点的电场
+        visited = torch.zeros_like(order).bool()
+        weights = visited.float()
         
-    if diffuse:
-        diffuse_field(pts, eps)
-    pts = pts.to(device)
+    rg = torch.arange(T).to(pts.device)
+    with MyTimer("propagation"):
+        for i in range(N):
+            idx = order[:,i]
+            visited[rg,idx] = True
+            interactions[rg,i] = torch.sum(interaction_mat[None,i] * weights, dim=-1)
+            weights[rg,idx] = torch.where(interactions[rg,i] < 0, -1.0, 1.0)
+            # TODO
+            # if verbose and torch.sum(visited) % 10 == 1 :
+            #     draw_field(pts[visited], pts[~visited], xie_field, eps=eps,times=sum(visited))
+            
+    # 未测试代码            
+    # if diffuse:
+    #     with MyTimer("diffuse"):
+    #         sign = (interaction_mat * weights[None,:]).sum(dim=-1)
+    #         sign = (sign > 0).float() * 2 - 1
+    #         pts[:, 3:] = pts[:, 3:] * sign[:, None]
+    torch.cuda.empty_cache()
     return interactions<0
 
 
@@ -548,6 +554,7 @@ def MIQP(A,B):
     assert A.shape[0] == A.shape[1]
     # Create a new model
     m = gp.Model("mip1")
+    m.setParam('OutputFlag', 0)
     # Create variables
     n = len(A)
     x = m.addVars(n, vtype=gp.GRB.BINARY, name="x")
@@ -571,7 +578,7 @@ def MIQP(A,B):
     return res
 
 
-    
+import graph    
 '''
 以BFS的顺序传播
 times: 传播次数;最后投票;默认为1,即只从starting_point开始传播一次;如果times>1,则随机从pts中再选择times个点作为starting_point。必须是正奇数
@@ -581,42 +588,48 @@ treshold: 生成图的treshold
 '''
 def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1,times = 1):
     assert times % 2 == 1 and times > 0
-    import graph
-    starting_points = [starting_point]
-    while len(np.unique(starting_points)) < times:
-        t = np.random.randint(0,pts.shape[0])
-        if t not in starting_points:
-            starting_points.append(t)
-    
-    xyz = pts[:,:3].cpu().numpy()
-    G = graph.getLinkedListGraphfromPc(xyz, k, treshold)
-    
-    def cal_w(order1,order2):
-        w = abs(torch.sum(order1^order2))
-        invw = len(order1) - w
-        return w,invw    
-   
-    cnts = torch.zeros(len(pts),dtype=torch.int).to(pts.device) 
-    all_flipstatus = torch.zeros([len(pts),times],dtype=torch.bool).to(pts.device)
-    
     MyTimer = util.timer_factory()
-    for i in range(times):
-        st = starting_points[i]
-        order = G.get_bfs_route(st)        
-        with MyTimer("xie_propagation_points_in_order::iter %d" % i):
-            all_flipstatus[:,i] =  xie_propagation_points_in_order(pts.clone(), eps, order, diffuse,verbose=False)
+   
+    with MyTimer("Generate Graph"):
+        starting_points = [starting_point]
+        while len(np.unique(starting_points)) < times:
+            t = np.random.randint(0,pts.shape[0])
+            if t not in starting_points:
+                starting_points.append(t)
         
-    A = torch.zeros([times,times],dtype=torch.float).to(pts.device)
-    B = torch.zeros([times,times],dtype=torch.float).to(pts.device)
-    for i in range(times):
-        for j in range(times):
-            A[i,j],B[i,j] = cal_w(all_flipstatus[:,i],all_flipstatus[:,j])
-    status = MIQP(A.cpu().numpy(),B.cpu().numpy())
-    status = torch.tensor(status,dtype=torch.bool).to(pts.device)
-    for i in range(times):
-        all_flipstatus[:,i] = all_flipstatus[:,i] ^ status[i]
-        cnts += all_flipstatus[:,i].int()
-    for i in range(len(pts)):
-        if cnts[i] > times/2:
-            pts[i,3:] *= -1
+        xyz = pts[:,:3].cpu().numpy()
+        G = graph.getLinkedListGraphfromPc(xyz, k, treshold)
+        
+        def cal_w(order1,order2):
+            w = abs(torch.sum(order1^order2))
+            invw = len(order1) - w
+            return w,invw    
+    
+        cnts = torch.zeros(len(pts),dtype=torch.int).to(pts.device) 
+        all_flipstatus = torch.zeros([len(pts),times],dtype=torch.bool).to(pts.device)
+    
+    orders = np.zeros([times,len(pts)],dtype=int)
+    with MyTimer("Multi BFS"):
+        for i in range(times):
+            st = starting_points[i]
+            orders[i] = G.get_bfs_route(st)
+           
+
+    with MyTimer("xie_propagation_points_in_order times = %d" % times):
+        all_flipstatus = xie_propagation_points_in_order(pts.clone(), eps, orders, diffuse,verbose=False).T
+
+    with MyTimer("Vote"):
+        A = torch.zeros([times,times],dtype=torch.float).to(pts.device)
+        B = torch.zeros([times,times],dtype=torch.float).to(pts.device)
+        for i in range(times):
+            for j in range(times):
+                A[i,j],B[i,j] = cal_w(all_flipstatus[:,i],all_flipstatus[:,j])
+        status = MIQP(A.cpu().numpy(),B.cpu().numpy())
+        status = torch.tensor(status,dtype=torch.bool).to(pts.device)
+        for i in range(times):
+            all_flipstatus[:,i] = all_flipstatus[:,i] ^ status[i]
+            cnts += all_flipstatus[:,i].int()
+        for i in range(len(pts)):
+            if cnts[i] > times/2:
+                pts[i,3:] *= -1
     return cnts > times/2
