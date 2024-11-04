@@ -529,13 +529,55 @@ def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False
         diffuse_field(pts, eps)
     pts = pts.to(device)
     return interactions<0
+
+
+def cal_loss(x,A,B):
+    n = len(x)
+    # x = np.array(x, dtype=int)
+    assert A.shape == (n,n)
+    assert B.shape == (n,n)
+    obj = 0
+    for i in range(n):
+        for j in range(n):
+            obj += A[i,j]*(1 - (x[i]-x[j])*(x[i]-x[j])) + B[i,j]*(x[i]- x[j])*(x[i] - x[j])
+    return obj
+
+import gurobipy as gp
+def MIQP(A,B):
+    assert A.shape == B.shape
+    assert A.shape[0] == A.shape[1]
+    # Create a new model
+    m = gp.Model("mip1")
+    # Create variables
+    n = len(A)
+    x = m.addVars(n, vtype=gp.GRB.BINARY, name="x")
+    # Set objective
+    obj = gp.QuadExpr()
+    obj -= cal_loss(x,A,B)
+    m.setObjective(obj, gp.GRB.MAXIMIZE)
+
+    # find the optimal solution
+    m.optimize()
+    res = np.zeros(n)
+    
+    # print('Obj: %g' % m.objVal)
+    # for v in m.getVars():
+    #     print('%s %g' % (v.varName, v.x))
+    # print('Optimal solution found')
+    
+    print('Obj: %g' % m.objVal)
+    for i in range(n):
+        res[i] = x[i].x
+    return res
+
+
     
 '''
 以BFS的顺序传播
 times: 传播次数;最后投票;默认为1,即只从starting_point开始传播一次;如果times>1,则随机从pts中再选择times个点作为starting_point。必须是正奇数
+对齐策略:要求任意两个点的翻转状态的异或结果最小
 k: 生成图的k近邻
 treshold: 生成图的treshold
-每次flip均与第一次flip对齐(TODO: 这个策略可以优化)
 '''
 def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1,times = 1):
     assert times % 2 == 1 and times > 0
@@ -549,30 +591,25 @@ def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, star
     xyz = pts[:,:3].cpu().numpy()
     G = graph.getLinkedListGraphfromPc(xyz, k, treshold)
     
-    def need_align(order1,order2):
-        if len(order1) != len(order2):
-            print("order1 and order2 length not equal")
-            return    
-        return sum(order1 == order2) > len(order1)/2
-    
-    st = starting_points[0]
-    order = G.get_bfs_route(st)        
-    flipstatus = xie_propagation_points_in_order(pts.clone(), eps, order, diffuse,verbose)
-    cnts = torch.zeros(len(pts),dtype=torch.int).to(pts.device)
-    cnts[flipstatus] += 1
-    cnts[~flipstatus] -= 1
-    for i in range(times-1):
+    def cal_w(order1,order2):
+        w = abs(torch.sum(order1^order2))
+        invw = len(order1) - w
+        return w,invw    
+   
+    cnts = torch.zeros(len(pts),dtype=torch.int).to(pts.device) 
+    all_flipstatus = torch.zeros([len(pts),times],dtype=torch.bool).to(pts.device)
+    for i in range(times):
         st = starting_points[i]
         order = G.get_bfs_route(st)        
-        t_flipstatus = xie_propagation_points_in_order(pts.clone(), eps, order, diffuse,verbose)
-        if need_align(flipstatus,t_flipstatus):
-            t_flipstatus = ~t_flipstatus
-        cnts[t_flipstatus] += 1
-        cnts[~t_flipstatus] -= 1
-    flipstatus = cnts > 0
-    for i in range(len(flipstatus)):
-        if flipstatus[i]:
-            pts[i,3:] *= -1
-    return flipstatus
+        all_flipstatus[:,i] =  xie_propagation_points_in_order(pts.clone(), eps, order, diffuse,verbose)
         
-    
+    A = torch.zeros([len(pts),len(pts)],dtype=torch.float).to(pts.device)
+    B = torch.zeros([len(pts),len(pts)],dtype=torch.float).to(pts.device)
+    for i in range(len(pts)):
+        for j in range(len(pts)):
+            A[i,j],B[i,j] = cal_w(all_flipstatus[i],all_flipstatus[j])
+    status = MIQP(A.cpu().numpy(),B.cpu().numpy())
+    for i in range(times):
+        all_flipstatus[:,i] = all_flipstatus[:,i] ^ status
+        cnts += all_flipstatus[:,i].int()
+    return all_flipstatus,cnts

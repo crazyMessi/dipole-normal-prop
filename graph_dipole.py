@@ -235,8 +235,8 @@ def run_floder(floder,exp_name):
 
 if __name__ == '__main__':
     MyTimer = util.timer_factory()
-    run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/hard/","hard")  
-    # run_file(input_pc_path)
+    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/hard/","hard")  
+    run_file(input_pc_path)
        
     # with MyTimer('graph_dipole'):
     #     graph_dipole(input_pc_path)
