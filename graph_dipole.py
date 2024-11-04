@@ -10,7 +10,7 @@ base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-p
 pc_name = "scene0000_gt122.ply"
 
 input_pc_path = base_path + "/data/hard/" + pc_name
-input_pc_path = "D:\WorkData\ipsr_explore\input\someseg/SceneNN_076_res334.ply"
+# input_pc_path = "D:\WorkData\ipsr_explore\input\someseg/SceneNN_076_res334.ply"
 
 output_path = base_path + "/data/output/"
 

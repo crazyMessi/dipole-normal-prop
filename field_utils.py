@@ -507,9 +507,10 @@ return bool tensor, True means has flipped
 '''
 def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False,verbose=False):
     MyTimer = util.timer_factory()
-    T,N = order.shape
     order = torch.tensor(order).to(pts.device)
     order.data = order.data.long()
+    T,N = order.shape
+    
     with MyTimer("prepare"):
         interactions = torch.zeros(T,N).to(pts.device) # 当前visited点对所有点的影响。shape: T x N
         interaction_mat = xie_intersaction(pts, pts, eps=eps) # N x N, 表示第i个点受到的来自第j个点的电场
@@ -521,11 +522,8 @@ def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False
         for i in range(N):
             idx = order[:,i]
             visited[rg,idx] = True
-            interactions[rg,i] = torch.sum(interaction_mat[None,i] * weights, dim=-1)
-            weights[rg,idx] = torch.where(interactions[rg,i] < 0, -1.0, 1.0)
-            # TODO
-            # if verbose and torch.sum(visited) % 10 == 1 :
-            #     draw_field(pts[visited], pts[~visited], xie_field, eps=eps,times=sum(visited))
+            interactions[rg,idx] = torch.sum(interaction_mat[idx] * weights, dim=-1)
+            weights[rg,idx] = torch.where(interactions[rg,idx] < 0, -1.0, 1.0)
             
     # 未测试代码            
     # if diffuse:
@@ -614,6 +612,9 @@ def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, star
             st = starting_points[i]
             orders[i] = G.get_bfs_route(st)
            
+    # for i in range(times):
+    #     with MyTimer("xie_propagation_points_in_order times = %d" % times):
+    #         all_flipstatus[:,i] = xie_propagation_points_in_order(pts.clone(), eps, [orders[i]], diffuse,verbose=False)[0]
 
     with MyTimer("xie_propagation_points_in_order times = %d" % times):
         all_flipstatus = xie_propagation_points_in_order(pts.clone(), eps, orders, diffuse,verbose=False).T
