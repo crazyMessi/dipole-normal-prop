@@ -598,18 +598,25 @@ def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, star
    
     cnts = torch.zeros(len(pts),dtype=torch.int).to(pts.device) 
     all_flipstatus = torch.zeros([len(pts),times],dtype=torch.bool).to(pts.device)
+    
+    MyTimer = util.timer_factory()
     for i in range(times):
         st = starting_points[i]
         order = G.get_bfs_route(st)        
-        all_flipstatus[:,i] =  xie_propagation_points_in_order(pts.clone(), eps, order, diffuse,verbose)
+        with MyTimer("xie_propagation_points_in_order::iter %d" % i):
+            all_flipstatus[:,i] =  xie_propagation_points_in_order(pts.clone(), eps, order, diffuse,verbose=False)
         
-    A = torch.zeros([len(pts),len(pts)],dtype=torch.float).to(pts.device)
-    B = torch.zeros([len(pts),len(pts)],dtype=torch.float).to(pts.device)
-    for i in range(len(pts)):
-        for j in range(len(pts)):
-            A[i,j],B[i,j] = cal_w(all_flipstatus[i],all_flipstatus[j])
-    status = MIQP(A.cpu().numpy(),B.cpu().numpy())
+    A = torch.zeros([times,times],dtype=torch.float).to(pts.device)
+    B = torch.zeros([times,times],dtype=torch.float).to(pts.device)
     for i in range(times):
-        all_flipstatus[:,i] = all_flipstatus[:,i] ^ status
+        for j in range(times):
+            A[i,j],B[i,j] = cal_w(all_flipstatus[:,i],all_flipstatus[:,j])
+    status = MIQP(A.cpu().numpy(),B.cpu().numpy())
+    status = torch.tensor(status,dtype=torch.bool).to(pts.device)
+    for i in range(times):
+        all_flipstatus[:,i] = all_flipstatus[:,i] ^ status[i]
         cnts += all_flipstatus[:,i].int()
-    return all_flipstatus,cnts
+    for i in range(len(pts)):
+        if cnts[i] > times/2:
+            pts[i,3:] *= -1
+    return cnts > times/2

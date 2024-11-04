@@ -13,6 +13,9 @@ input_pc_path = base_path + "/data/hard/" + pc_name
 # input_pc_path = "D:\WorkData\ipsr_explore\input\someseg/sceneNN_41_380dist.ply"
 
 output_path = base_path + "/data/output/"
+
+CUDA_VISIBLE_DEVICES = 7
+
 if not Path(output_path).exists():
     Path(output_path).mkdir(parents=True)
 
@@ -37,6 +40,7 @@ def xie_tree_propagation_points_file(input_pc,eps = 1e-2,verbose=True,times=1):
 
 def single_propagate_file(pc_path,verbose=True, use_origin_normal=False, propagation_method=st_propagation_points_file,*args, **kwargs):
     device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
+    # device = torch.device('cpu')
     MyTimer = util.timer_factory()
     with MyTimer('load pc', count=False):
         pc = o3d.io.read_point_cloud(pc_path)
@@ -235,8 +239,8 @@ def run_floder(floder,exp_name):
 
 if __name__ == '__main__':
     MyTimer = util.timer_factory()
-    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/hard/","hard")  
-    run_file(input_pc_path)
+    run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/hard/","hard")  
+    # run_file(input_pc_path)
        
     # with MyTimer('graph_dipole'):
     #     graph_dipole(input_pc_path)
