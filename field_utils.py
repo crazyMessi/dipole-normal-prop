@@ -491,7 +491,7 @@ def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point
         interactions[~visited] += xie_intersaction(pts[visited], pts[~visited], eps=eps).sum(dim=-1)
         if torch.sum(visited) % 10 == 1 and verbose:
             draw_field(pts[visited], pts[~visited], xie_field, eps=eps,times=sum(visited))
-            draw_field(pts[visited], pts[~visited], field_grad, eps=eps,times=sum(visited))
+            # draw_field(pts[visited], pts[~visited], field_grad, eps=eps,times=sum(visited))
             
         pts_index = indx[~visited][interactions[~visited].argmax()]
         if interactions[pts_index] < 0:
@@ -524,15 +524,12 @@ def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False
             visited[rg,idx] = True
             interactions[rg,idx] = torch.sum(interaction_mat[idx] * weights, dim=-1)
             weights[rg,idx] = torch.where(interactions[rg,idx] < 0, -1.0, 1.0)
-            
-    # 未测试代码            
-    # if diffuse:
-    #     with MyTimer("diffuse"):
-    #         sign = (interaction_mat * weights[None,:]).sum(dim=-1)
-    #         sign = (sign > 0).float() * 2 - 1
-    #         pts[:, 3:] = pts[:, 3:] * sign[:, None]
-    torch.cuda.empty_cache()
-    return interactions<0
+                       
+    if diffuse:
+        with MyTimer("diffuse"):
+            interactions  = (interaction_mat[:,None,:] * weights[None,:,:]).sum(dim=-1)
+            interactions = interactions.T
+    return (interactions<0)
 
 
 def cal_loss(x,A,B):
@@ -587,7 +584,6 @@ treshold: 生成图的treshold
 def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1,times = 1):
     assert times % 2 == 1 and times > 0
     MyTimer = util.timer_factory()
-   
     with MyTimer("Generate Graph"):
         starting_points = [starting_point]
         while len(np.unique(starting_points)) < times:
