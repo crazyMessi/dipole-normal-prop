@@ -15,6 +15,17 @@ max_thread = 50 # 同时处理的最大线程数
         
 device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
 
+def tree_xie_propagation(xyz_data,config):
+    input_pc = util.npxyz2tensor(xyz_data).to(device)
+    input_pc = util.estimate_normals(input_pc, max_nn=config['max_nn'])
+    input_pc, transform = util.Transform.trans(input_pc)
+    xie_propagation_points_onbfstree(input_pc, eps=config['eps'], diffuse=config['diffuse'])
+    if measure_mean_potential(input_pc) < 0:
+        input_pc[:, 3:] *= -1
+    transformed_pc = transform.inverse(input_pc)
+    transformed_pc = transformed_pc.cpu().numpy()
+    return transformed_pc
+
 def simple_estimate(xyz_data,config):
     input_pc = util.npxyz2tensor(xyz_data).to(device)
     input_pc = util.estimate_normals(input_pc, max_nn=30)
@@ -107,6 +118,9 @@ def handle_client(conn, addr):
                 result = transformed_pc
             elif req['function_name'] == 'xie_propagation':
                 transformed_pc = xie_propagation(xyz_data, req['function_config'])
+                result = transformed_pc
+            elif req['function_name'] == 'tree_xie_propagation':
+                transformed_pc = tree_xie_propagation(xyz_data, req['function_config'])
                 result = transformed_pc
             else:
                 print(f"Unknown method: {req['function_name']}")
