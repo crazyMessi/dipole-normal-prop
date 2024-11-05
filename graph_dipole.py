@@ -11,7 +11,7 @@ base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-p
 pc_name = "scene37_0.001_gt97.ply"
 
 input_pc_path = base_path + "/data/hard/" + pc_name
-# input_pc_path = "D:\WorkData\ipsr_explore\input\someseg/sceneNN_41_366dist.ply"
+input_pc_path = "D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/scene0037_102201_it_10_gt140.ply"
 
 output_path = base_path + "/data/output/"
 
@@ -59,9 +59,9 @@ def single_propagate_file(pc_path,verbose=True, use_origin_normal=False, propaga
         util.draw_pc(input_pc, path=Path(output_path + "/single_%s_result.ply"% propagation_method.__name__))
     # 如果有gt_pc,计算误差
     if gt_pc.shape[1] == 6:
-        loss = util.cal_loss(gt_pc,input_pc)
-        print("loss:",loss)
-        return loss
+        metrics = util.cal_metrics(gt_pc,input_pc)
+        print("metrics:",metrics)
+        return metrics
 
 def graph_dipole_server_api(xyz_data,config):
     device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
@@ -168,9 +168,9 @@ def graph_dipole(pc_path, use_ncut=True, verbose=True):
 
     # 如果有gt_pc,计算误差
     if normals.shape[0] == xyz.shape[0]:
-        loss = util.cal_loss(gt_pc,input_pc)
-        print("loss:",loss)
-        return loss
+        metrics = util.cal_metrics(gt_pc,input_pc)
+        print("loss:",metrics)
+        return metrics
 
 import threading
 
@@ -180,74 +180,87 @@ def run_file(file) -> str:
     printmsg = "%s," % file
     MyTimer = util.timer_factory() 
     
+    metrics = ['loss','count_90','total_count']
+    # head += ",".join(metrics) + ","
+    
     with MyTimer('xie on tree'):
-        # gt_tree_xie_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=xie_tree_propagation_points_file))
-        # print("\n")
-        tree_xie_loss = str(single_propagate_file(file,use_origin_normal=False,propagation_method=xie_tree_propagation_points_file,times=5))
+        gt_tree_xie_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=xie_tree_propagation_points_file))
+        print("\n")
+        tree_xie_loss = (single_propagate_file(file,use_origin_normal=False,propagation_method=xie_tree_propagation_points_file,times=9))
         print("\n")        
         head += "tree_xie_loss," 
-        printmsg += "%s," % tree_xie_loss
+        printmsg += "%s," % str(tree_xie_loss['count_90'] / tree_xie_loss['total_count'])
     print("\n")
     
     with MyTimer('xie dipole'):
-        # gt_xie_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=xie_propagation_points_file))
-        # print("\n")
+        gt_xie_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=xie_propagation_points_file))
+        print("\n")
         
-        xie_loss = str(single_propagate_file(file,use_origin_normal=False,propagation_method=xie_propagation_points_file))
+        xie_loss = (single_propagate_file(file,use_origin_normal=False,propagation_method=xie_propagation_points_file))
         print("\n")
     
         head += "xie_loss,"
-        printmsg += "%s," % xie_loss
+        printmsg += "%s," % str(xie_loss['count_90'] / xie_loss['total_count'])
     print("\n")
         
     with MyTimer('st dipole'):
-        # gt_dipole_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=st_propagation_points_file))
-        # print("\n")
+        gt_dipole_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=st_propagation_points_file))
+        print("\n")
         
-        dipole_loss = str(single_propagate_file(file,use_origin_normal=False,propagation_method=st_propagation_points_file))
+        dipole_loss = (single_propagate_file(file,use_origin_normal=False,propagation_method=st_propagation_points_file))
         print("\n")
         
         head += "dipole_loss"
-        printmsg += "%s," % dipole_loss
+        printmsg += "%s," % str(dipole_loss['count_90'] / dipole_loss['total_count'])
     return printmsg,head
 
 
-def run_floder(floder,exp_name):
+def run_floder(floder,exp_name,if_parallel=False):
     pc_list = os.listdir(floder)
     log = open("temp/%s.log" % exp_name,"w")
     # lock
     lock = threading.Lock()
     threads = []
-    head = False
-
+    # 定义一个全局变量，用于判断head是否已经写入
+    head_writed = False
+    
     def single_handle(filename):
         if filename[-3:] == "ply" and filename.find("gt") != -1:
             msg,head = run_file(floder + filename)
             lock.acquire()
-            if not head:
+            log = open("temp/%s.log" % exp_name,"a")
+            nonlocal head_writed
+            if not head_writed:
                 log.write(head + "\n")
-                head = True
+                head_writed = True
             print("=============================================")
             print(msg)
             log.write(msg + "\n")
+            log.close()
             lock.release()
 
-    for pc in pc_list:
-        if pc[-3:] != "ply" or pc.find("gt") == -1:
-            continue
-        # 创建线程
-        t = threading.Thread(target=single_handle,args=(pc,))
-        threads.append(t)
-        t.start()
-    for t in threads:
-        t.join()
+    if if_parallel:
+        for pc in pc_list:
+            if pc[-3:] != "ply" or pc.find("gt") == -1:
+                continue
+            # 创建线程
+            t = threading.Thread(target=single_handle,args=(pc,))
+            threads.append(t)
+            t.start()
+        for t in threads:
+            t.join()
+    else:
+        for pc in pc_list:
+            if pc[-3:] != "ply" or pc.find("gt") == -1:
+                continue
+            single_handle(pc)
     log.close()
 
 
 if __name__ == '__main__':
     MyTimer = util.timer_factory()
     run_file(input_pc_path)
-    run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/hard/","hard")  
+    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/","gt_test_1105_2")  
        
     # with MyTimer('graph_dipole'):
     #     graph_dipole(input_pc_path)

@@ -687,8 +687,14 @@ def cal_90_count(pc1,pc2):
     count = min(count, len(angle) - count)
     return count
 
-def cal_loss(pc1, pc2):
-    assert pc1.shape[1] == pc2.shape[1]
+def cal_metrics(pc1, pc2):
     loss = cal_nd_loss(pc1, pc2)
-    count = cal_90_count(pc1, pc2)
-    return "loss: {:.2f}, 90_count: {}/{}".format(loss, count, len(pc1))
+    count90 = cal_90_count(pc1, pc2)
+    total_count = len(pc1)
+    return {'loss': loss, 'count_90': count90, 'total_count': total_count}
+
+# def cal_loss(pc1, pc2):
+#     assert pc1.shape[1] == pc2.shape[1]
+#     loss = cal_nd_loss(pc1, pc2)
+#     count = cal_90_count(pc1, pc2)
+#     return "loss: {:.2f}, 90_count: {}/{}".format(loss, count, len(pc1))
