@@ -512,10 +512,10 @@ def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False
     T,N = order.shape
     
     with MyTimer("prepare"):
-        interactions = torch.zeros(T,N).to(pts.device) # 当前visited点对所有点的影响。shape: T x N
+        interactions = torch.zeros(T,N).to(pts.device).type(pts.dtype) # 当前visited点对所有点的影响。shape: T x N
         interaction_mat = xie_intersaction(pts, pts, eps=eps) # N x N, 表示第i个点受到的来自第j个点的电场
         visited = torch.zeros_like(order).bool()
-        weights = visited.float()
+        weights = visited.clone().type(pts.dtype)
         
     rg = torch.arange(T).to(pts.device)
     with MyTimer("propagation"):
@@ -523,7 +523,8 @@ def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False
             idx = order[:,i]
             visited[rg,idx] = True
             interactions[rg,idx] = torch.sum(interaction_mat[idx] * weights, dim=-1)
-            weights[rg,idx] = torch.where(interactions[rg,idx] < 0, -1.0, 1.0)
+            # print(weights.dtype)
+            weights[rg,idx] = torch.where(interactions[rg,idx] < 0, -1.0, 1.0).type(pts.dtype)
                        
     if diffuse:
         with MyTimer("diffuse"):
@@ -600,7 +601,7 @@ def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, star
             return w,invw    
     
         cnts = torch.zeros(len(pts),dtype=torch.int).to(pts.device) 
-        all_flipstatus = torch.zeros([len(pts),times],dtype=torch.bool).to(pts.device)
+        # all_flipstatus = torch.zeros([len(pts),times],dtype=torch.bool).to(pts.device)
     
     orders = np.zeros([times,len(pts)],dtype=int)
     with MyTimer("Multi BFS"):

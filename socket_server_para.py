@@ -1,10 +1,9 @@
+import field_utils
 import socket
 import numpy as np
 import json
-from options import get_parser
-import options
-from pathlib import Path
-from field_utils import *
+import torch
+import util
 torch.manual_seed(1)
 
 # 设置服务器的IP和端口
@@ -19,8 +18,8 @@ def tree_xie_propagation(xyz_data,config):
     input_pc = util.npxyz2tensor(xyz_data).to(device)
     input_pc = util.estimate_normals(input_pc, max_nn=config['max_nn'])
     input_pc, transform = util.Transform.trans(input_pc)
-    xie_propagation_points_onbfstree(input_pc, eps=config['eps'], diffuse=config['diffuse'])
-    if measure_mean_potential(input_pc) < 0:
+    field_utils.xie_propagation_points_onbfstree(input_pc, eps=config['eps'], diffuse=config['diffuse'], times=config['times'], starting_point=0)
+    if field_utils.measure_mean_potential(input_pc) < 0:
         input_pc[:, 3:] *= -1
     transformed_pc = transform.inverse(input_pc)
     transformed_pc = transformed_pc.cpu().numpy()
@@ -31,8 +30,8 @@ def simple_estimate(xyz_data,config):
     input_pc = util.estimate_normals(input_pc, max_nn=30)
     # util.draw_pc(input_pc, path=Path("data/output/server_init.ply"))
     input_pc, transform = util.Transform.trans(input_pc)
-    strongest_field_propagation_points(input_pc, diffuse=config['diffuse'], starting_point=0)
-    if measure_mean_potential(input_pc) < 0:
+    field_utils.strongest_field_propagation_points(input_pc, diffuse=config['diffuse'], starting_point=0)
+    if field_utils.measure_mean_potential(input_pc) < 0:
         input_pc[:, 3:] *= -1
     transformed_pc = transform.inverse(input_pc)
     transformed_pc = transformed_pc.cpu().numpy()
@@ -43,8 +42,8 @@ def xie_propagation(xyz_data,config):
     input_pc = util.npxyz2tensor(xyz_data).to(device)
     input_pc = util.estimate_normals(input_pc, max_nn=config['max_nn'])
     input_pc, transform = util.Transform.trans(input_pc)
-    xie_propagation_points(input_pc, eps=config['eps'], diffuse=config['diffuse'], starting_point=0)
-    if measure_mean_potential(input_pc) < 0:
+    field_utils.xie_propagation_points(input_pc, eps=config['eps'], diffuse=config['diffuse'], starting_point=0)
+    if field_utils.measure_mean_potential(input_pc) < 0:
         input_pc[:, 3:] *= -1
     transformed_pc = transform.inverse(input_pc)
     transformed_pc = transformed_pc.cpu().numpy()
@@ -164,7 +163,7 @@ import argparse
 if __name__ == "__main__":
     # 输入参数
     parser = argparse.ArgumentParser()
-    parser.add_argument('--port', type=int, default=12344, help='Port number')
+    parser.add_argument('--port', type=int, default=PORT, help='Port number')
     parser.add_argument('--max_thread', type=int, default=max_thread, help='Max thread number')
     parser.add_argument('--gpu', type=int, default=0, help='GPU number')
     args = parser.parse_args()
