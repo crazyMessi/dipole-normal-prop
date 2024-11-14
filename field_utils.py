@@ -505,15 +505,28 @@ def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point
 '''
 return bool tensor, True means has flipped
 '''
-def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False,verbose=False):
+def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False,verbose=False,use_weight = False):
     MyTimer = util.timer_factory()
     order = torch.tensor(order).to(pts.device)
     order.data = order.data.long()
     T,N = order.shape
     
+    pointWeight = torch.ones(len(pts)).to(pts.device)
+    
+    # 每个点的权重被设置为其第k远邻的距离
+    if use_weight:
+        from sklearn.neighbors import KDTree
+        xyz = pts[:,:3].cpu().numpy()
+        tree = KDTree(xyz)
+        distance,idx = tree.query(xyz, 10)
+        pointWeight = torch.tensor(distance.mean(axis=1),dtype=pts.dtype).to(pts.device)
+        
+    
     with MyTimer("prepare"):
         interactions = torch.zeros(T,N).to(pts.device).type(pts.dtype) # 当前visited点对所有点的影响。shape: T x N
         interaction_mat = xie_intersaction(pts, pts, eps=eps) # N x N, 表示第i个点受到的来自第j个点的电场
+        if use_weight:
+            interaction_mat = interaction_mat * pointWeight[None,:]
         visited = torch.zeros_like(order).bool()
         weights = visited.clone().type(pts.dtype)
         
@@ -582,7 +595,7 @@ times: 传播次数;最后投票;默认为1,即只从starting_point开始传播�
 k: 生成图的k近邻
 treshold: 生成图的treshold
 '''
-def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1,times = 1):
+def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1,times = 1,use_weight = False):
     assert times % 2 == 1 and times > 0
     MyTimer = util.timer_factory()
     with MyTimer("Generate Graph"):
@@ -614,7 +627,7 @@ def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, star
     #         all_flipstatus[:,i] = xie_propagation_points_in_order(pts.clone(), eps, [orders[i]], diffuse,verbose=False)[0]
 
     with MyTimer("xie_propagation_points_in_order times = %d" % times):
-        all_flipstatus = xie_propagation_points_in_order(pts.clone(), eps, orders, diffuse,verbose=False).T
+        all_flipstatus = xie_propagation_points_in_order(pts.clone(), eps, orders, diffuse,verbose=False,use_weight=use_weight).T
 
     with MyTimer("Vote"):
         A = torch.zeros([times,times],dtype=torch.float).to(pts.device)
