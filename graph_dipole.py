@@ -11,7 +11,7 @@ base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-p
 pc_name = "scene37_0.001_gt97.ply"
 
 input_pc_path = base_path + "/data/hard/" + pc_name
-input_pc_path = "D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/scene0037_102201_it_10_gt0.ply"
+input_pc_path = "D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/scene0037_102201_it_10_gt49.ply"
 
 pc_name = input_pc_path.split("/")[-1]
 pc_name = ".".join(pc_name.split(".")[:-1])
@@ -242,8 +242,10 @@ def run_file(file,verbose=False) -> str:
     # head += ",".join(metrics) + ","
     
     with MyTimer('xie on tree with pointWeight'):
-        # gt_tree_xie_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=xie_tree_propagation_points_file))
-        # print("\n")
+        gt_tree_xie_loss = single_propagate_file(file,use_origin_normal=True,propagation_method=xie_tree_propagation_points_file,times=flip_times,use_weight=True,verbose=verbose)
+        print("\n")
+        head += "gt_tree_xie_with_pw_loss,"
+        printmsg += "%s," % str(gt_tree_xie_loss['count_90'] / gt_tree_xie_loss['total_count'])
         tree_xie_loss = (single_propagate_file(file,use_origin_normal=False,propagation_method=xie_tree_propagation_points_file,times=flip_times,use_weight=True,verbose=verbose))
         print("\n")        
         head += "tree_xie_with_pw_loss," 
@@ -252,9 +254,11 @@ def run_file(file,verbose=False) -> str:
     
 
     with MyTimer('xie on tree'):
-        # gt_tree_xie_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=xie_tree_propagation_points_file))
-        # print("\n")
-        tree_xie_loss = (single_propagate_file(file,use_origin_normal=False,propagation_method=xie_tree_propagation_points_file,times=flip_times,verbose=verbose))
+        gt_tree_xie_loss = single_propagate_file(file,use_origin_normal=True,propagation_method=xie_tree_propagation_points_file,times=flip_times,verbose=verbose,use_weight=False)
+        head += "gt_tree_xie_loss,"
+        printmsg += "%s," % str(gt_tree_xie_loss['count_90'] / gt_tree_xie_loss['total_count'])
+        print("\n")
+        tree_xie_loss = single_propagate_file(file,use_origin_normal=False,propagation_method=xie_tree_propagation_points_file,times=flip_times,verbose=verbose,use_weight=False)
         print("\n")        
         head += "tree_xie_loss," 
         printmsg += "%s," % str(tree_xie_loss['count_90'] / tree_xie_loss['total_count'])
@@ -271,15 +275,16 @@ def run_file(file,verbose=False) -> str:
     #     printmsg += "%s," % str(xie_loss['count_90'] / xie_loss['total_count'])
     # print("\n")
         
-    # with MyTimer('st dipole'):
-    #     # gt_dipole_loss = str(single_propagate_file(file,use_origin_normal=True,propagation_method=st_propagation_points_file))
-    #     # print("\n")
+    with MyTimer('st dipole'):
+        gt_dipole_loss = single_propagate_file(file,use_origin_normal=True,propagation_method=st_propagation_points_file)
+        head += "gt_dipole_loss,"
+        printmsg += "%s," % str(gt_dipole_loss['count_90'] / gt_dipole_loss['total_count'])
+        print("\n")
         
-    #     dipole_loss = (single_propagate_file(file,use_origin_normal=False,propagation_method=st_propagation_points_file))
-    #     print("\n")
-        
-    #     head += "dipole_loss"
-    #     printmsg += "%s," % str(dipole_loss['count_90'] / dipole_loss['total_count'])
+        dipole_loss = (single_propagate_file(file,use_origin_normal=False,propagation_method=st_propagation_points_file))
+        print("\n")
+        head += "dipole_loss"
+        printmsg += "%s," % str(dipole_loss['count_90'] / dipole_loss['total_count'])
     return printmsg,head
 
 
@@ -329,7 +334,7 @@ if __name__ == '__main__':
     MyTimer = util.timer_factory()
     run_file(input_pc_path,True)
     # print(run_res_and_compare(input_pc_path))
-    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/","test_pointweight",hander=run_file)
+    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/","ori_dipole",hander=run_file)
        
     # with MyTimer('graph_dipole'):
     #     graph_dipole(input_pc_path)

@@ -259,7 +259,7 @@ class GraphPC:
 class LinkedListGraph:
     
     ''' 
-    只存储了end的带权边。专门用于邻接链表表示的图
+    只存储了end的带权边(不是正儿八经的半边）。专门用于邻接链表表示的图
     '''
     class halfEdge:
         def __init__(self,v,w):
@@ -340,20 +340,54 @@ class LinkedListGraph:
             print("bfs warning::unit= ",unit)
         return res    
 
+from sklearn.neighbors import KDTree
+import time
+def test_o3d_kdtree(xyz:np.ndarray,k:int = 10,times = 1000):
+    current_time = time.time()
+    max_dist = np.zeros(len(xyz))
+    for i in range(times):
+        # 建树
+        points = o3d.utility.Vector3dVector(xyz.copy())
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = points
+        tree = o3d.geometry.KDTreeFlann(pcd)
+        for i in range(len(xyz)):
+            [k, idx, dist] = tree.search_knn_vector_3d(xyz[i], k)
+            max_dist[i] = np.max(dist)
+    print("o3d_kdtree time: ",time.time() - current_time)
+    return max_dist
+
+def test_sklearn_kdtree(xyz:np.ndarray,k:int = 10,times = 1000):
+    max_dist = np.zeros(len(xyz))
+    current_time = time.time()
+    for i in range(times):
+        # 建树
+        tree = KDTree(xyz)
+        distance,idx = tree.query(xyz,k)
+        max_dist = np.max(distance,axis=1)
+    print("sklearn_kdtree time: ",time.time() - current_time)
+    return max_dist
+
+
+'''
+return :
+- G: LinkedListGraph
+- mean_k_dist: the mean distance of the k nearest neighbors
+'''
 def getLinkedListGraphfromPc(xyz:np.ndarray,k:int = 10,threshold:float = 0.1):
     # 建树
-    points = o3d.utility.Vector3dVector(xyz.copy())
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = points
-    tree = o3d.geometry.KDTreeFlann(pcd)
-    n = len(points)
+    tree = KDTree(xyz)
+    n = len(xyz)
+    mean_k_dist = np.zeros(n)
     G = LinkedListGraph(n)
+    distance,idx = tree.query(xyz,k)
     for i in range(n):
-        [k, idx, _] = tree.search_knn_vector_3d(points[i], k)
         for j in range(k):
-            if idx[j] != i:
-                G.add_edge(i,idx[j],np.linalg.norm(points[i] - points[idx[j]]))    
-    return G
+            if idx[i,j] != i and distance[i,j] < threshold:
+                G.add_edge(i,int(idx[i,j]),distance[i,j])
+    mean_k_dist = np.mean(distance,axis=1)
+    return G,mean_k_dist
+    
     
 
 '''
