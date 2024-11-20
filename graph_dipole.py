@@ -11,7 +11,8 @@ base_path = "D:/Documents/zhudoongli/CG/project/NormalEstimation/dipole-normal-p
 pc_name = "scene37_0.001_gt97.ply"
 
 input_pc_path = base_path + "/data/hard/" + pc_name
-input_pc_path = "D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/scene0037_102201_it_10_gt49.ply"
+# input_pc_path = "D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/initial_result.xyz"
+input_pc_path = "D:\WorkData\ipsr_explore\input/big_segments/scene0465_00_vh_clean_2_gt11.ply"
 
 pc_name = input_pc_path.split("/")[-1]
 pc_name = ".".join(pc_name.split(".")[:-1])
@@ -275,22 +276,22 @@ def run_file(file,verbose=False) -> str:
     #     printmsg += "%s," % str(xie_loss['count_90'] / xie_loss['total_count'])
     # print("\n")
         
-    with MyTimer('st dipole'):
-        gt_dipole_loss = single_propagate_file(file,use_origin_normal=True,propagation_method=st_propagation_points_file)
-        head += "gt_dipole_loss,"
-        printmsg += "%s," % str(gt_dipole_loss['count_90'] / gt_dipole_loss['total_count'])
-        print("\n")
+    # with MyTimer('st dipole'):
+    #     gt_dipole_loss = single_propagate_file(file,use_origin_normal=True,propagation_method=st_propagation_points_file)
+    #     head += "gt_dipole_loss,"
+    #     printmsg += "%s," % str(gt_dipole_loss['count_90'] / gt_dipole_loss['total_count'])
+    #     print("\n")
         
-        dipole_loss = (single_propagate_file(file,use_origin_normal=False,propagation_method=st_propagation_points_file))
-        print("\n")
-        head += "dipole_loss"
-        printmsg += "%s," % str(dipole_loss['count_90'] / dipole_loss['total_count'])
+    #     dipole_loss = (single_propagate_file(file,use_origin_normal=False,propagation_method=st_propagation_points_file))
+    #     print("\n")
+    #     head += "dipole_loss"
+    #     printmsg += "%s," % str(dipole_loss['count_90'] / dipole_loss['total_count'])
     return printmsg,head
 
 
 def run_floder(floder,exp_name,if_parallel=False,hander=run_file):
     pc_list = os.listdir(floder)
-    log = open("temp/%s.log" % exp_name,"w")
+    log = open("temp/%s.csv" % exp_name,"w")
     # lock
     lock = threading.Lock()
     threads = []
@@ -298,10 +299,10 @@ def run_floder(floder,exp_name,if_parallel=False,hander=run_file):
     head_writed = False
     
     def single_handle(filename):
-        if filename[-3:] == "ply" and filename.find("gt") != -1:
+        if filename[-3:] == "ply":
             msg,head = hander(floder + filename)
             lock.acquire()
-            log = open("temp/%s.log" % exp_name,"a")
+            log = open("temp/%s.csv" % exp_name,"a")
             nonlocal head_writed
             if not head_writed:
                 log.write(head + "\n")
@@ -314,7 +315,7 @@ def run_floder(floder,exp_name,if_parallel=False,hander=run_file):
 
     if if_parallel:
         for pc in pc_list:
-            if pc[-3:] != "ply" or pc.find("gt") == -1:
+            if pc[-3:] != "ply" :
                 continue
             # 创建线程
             t = threading.Thread(target=single_handle,args=(pc,))
@@ -324,7 +325,7 @@ def run_floder(floder,exp_name,if_parallel=False,hander=run_file):
             t.join()
     else:
         for pc in pc_list:
-            if pc[-3:] != "ply" or pc.find("gt") == -1:
+            if pc[-3:] != "ply" :
                 continue
             single_handle(pc)
     log.close()
@@ -332,9 +333,9 @@ def run_floder(floder,exp_name,if_parallel=False,hander=run_file):
 
 if __name__ == '__main__':
     MyTimer = util.timer_factory()
-    run_file(input_pc_path,True)
+    # run_file(input_pc_path,True)
     # print(run_res_and_compare(input_pc_path))
-    # run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/gt_test_2/","ori_dipole",hander=run_file)
+    run_floder("D:\Documents/zhudoongli\CG\project/NormalEstimation/dipole-normal-prop/data/scene_raw_taugh_downsampled_0.02/","r_xie",hander=run_file)
        
     # with MyTimer('graph_dipole'):
     #     graph_dipole(input_pc_path)

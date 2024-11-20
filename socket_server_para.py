@@ -14,6 +14,19 @@ max_thread = 50 # 同时处理的最大线程数
         
 device = torch.device(torch.cuda.current_device() if torch.cuda.is_available() else torch.device('cpu'))
 
+def log_msg(msg,mode='error'):
+    if mode == 'error':
+        print("\033[1;31m" + msg + "\033[0m")
+    elif mode == 'warning':
+        print("\033[1;33m" + msg + "\033[0m")
+    else:
+        print("\033[1;32m" + msg + "\033[0m")
+        
+    log_path = mode + ".log"
+    with open(log_path, 'a') as f:
+        f.write(msg + '\n')
+    return
+
 def tree_xie_propagation(xyz_data,config):
     input_pc = util.npxyz2tensor(xyz_data).to(device)
     input_pc = util.estimate_normals(input_pc, max_nn=config['max_nn'])
@@ -123,12 +136,14 @@ def handle_client(conn, addr):
                 result = transformed_pc
             else:
                 print(f"Unknown method: {req['function_name']}")
+                log_msg(f"Unknown method: {req['function_name']}",mode='error')
                 assert False
 
             # 返回结果
             conn.sendall(result.astype(np.float64).tobytes())
         except Exception as e:
             print(f"Error: {e}")
+            log_msg(f"Error: {e}",mode='error')
             conn.sendall(json.dumps({"status": "ERROR"}).encode())
         finally:
             conn.close()

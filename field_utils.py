@@ -388,25 +388,41 @@ def strongest_field_propagation_points(pts: torch.Tensor, diffuse=False, startin
         return pts
 
 
-def xie_field(source:torch.Tensor, target: torch.Tensor, eps):
-    R = source[None,:,:3] - target[:,None,:3] # M x N x 3, 表示第M个target点到第N个source点的距离向量
-    R_norm = R.norm(dim=-1) # 
-    zero_mask = R_norm == 0
-    normal_s = source[:, 3:] 
-    horizental_distant = torch.cross(normal_s[None,:,:], R).norm(dim=-1)  / normal_s.norm(dim=-1)[None,:]
-    Gussian = torch.zeros_like(R_norm)
-    # h_zero_mask = horizental_distant == 0
-    # Gussian = torch.exp(-horizental_distant ** 2 / (2 * eps ** 2))
-    # Gussian = torch.exp(-R_norm ** 2 / (2 * eps ** 2)) * 100
-    # Gussian[~h_zero_mask] = Gussian[~h_zero_mask] / (horizental_distant[~h_zero_mask] ** 3)
-    # Gussian[~zero_mask] = Gussian[~zero_mask] / (R_norm[~zero_mask] ** 3)
-    Gussian[~zero_mask] = torch.ones_like(Gussian[~zero_mask])/ ((R_norm[~zero_mask] + horizental_distant[~zero_mask]) ** 3)
-    
-    R_unit = R.clone()
-    R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
-    normal_s = source[:, 3:] 
-    semi_normal_s = 2 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit - normal_s
-    ref_normal_s = semi_normal_s * -1
+# 返回xie_field.shape = [targt.shape[0],source.shape[0],3],xie_field[i,j]表示第i个target点受到的第j个source产生的能量
+def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000):
+    with torch.no_grad():
+        if source.shape[0] * target.shape[0] > max_pts ** 2:
+            def break_by_source():
+                mid = int(source.shape[0] / 2)
+                return torch.cat([xie_field(source[:mid], target, eps, max_pts),
+                                    xie_field(source[mid:], target, eps, max_pts)], dim=1)
+                
+            def break_by_target():
+                mid = int(target.shape[0] / 2)
+                return torch.cat([xie_field(source, target[:mid], eps, max_pts),
+                                    xie_field(source, target[mid:], eps, max_pts)], dim=0)
+            if source.shape[0] > target.shape[0]:
+                return break_by_source()
+            else:
+                return break_by_target()
+        R = source[None,:,:3] - target[:,None,:3] # M x N x 3, 表示第M个target点到第N个source点的距离向量
+        R_norm = R.norm(dim=-1) # 
+        zero_mask = R_norm == 0
+        normal_s = source[:, 3:] 
+        horizental_distant = torch.cross(normal_s[None,:,:], R).norm(dim=-1)  / normal_s.norm(dim=-1)[None,:]
+        Gussian = torch.zeros_like(R_norm)
+        # h_zero_mask = horizental_distant == 0
+        # Gussian = torch.exp(-horizental_distant ** 2 / (2 * eps ** 2))
+        # Gussian = torch.exp(-R_norm ** 2 / (2 * eps ** 2)) * 100
+        # Gussian[~h_zero_mask] = Gussian[~h_zero_mask] / (horizental_distant[~h_zero_mask] ** 3)
+        # Gussian[~zero_mask] = Gussian[~zero_mask] / (R_norm[~zero_mask] ** 3)
+        Gussian[~zero_mask] = torch.ones_like(Gussian[~zero_mask])/ ((R_norm[~zero_mask] + horizental_distant[~zero_mask]) ** 3)
+        
+        R_unit = R.clone()
+        R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
+        normal_s = source[:, 3:] 
+        semi_normal_s = 2 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit - normal_s
+        ref_normal_s = semi_normal_s * -1
     return ref_normal_s * Gussian[:, :, None]
 
 
@@ -481,14 +497,15 @@ def draw_field(source:torch.Tensor, target: torch.Tensor, field_cacular,opt = 's
 # eps: 高斯核参数 越大越平滑
 # return: M x N
 def xie_intersaction(source: torch.Tensor, target: torch.Tensor, eps):
-    ref_normal_s = xie_field(source, target, eps=eps)
-    intersaction  = ( ref_normal_s * target[:,None, 3:] ).sum(dim=-1)
-    if intersaction.isnan().any():
-        print("warning: %d nan in xie_intersaction" % intersaction.isnan().sum())
-    if intersaction.isinf().any():
-        print("warning: %d inf in xie_intersaction" % intersaction.isinf().sum())
-    intersaction[intersaction.isnan()] = 0
-    intersaction[intersaction.isinf()] = 0
+    with torch.no_grad():
+        ref_normal_s = xie_field(source, target, eps=eps)
+        intersaction  = ( ref_normal_s * target[:,None, 3:] ).sum(dim=-1)
+        if intersaction.isnan().any():
+            print("warning: %d nan in xie_intersaction" % intersaction.isnan().sum())
+        if intersaction.isinf().any():
+            print("warning: %d inf in xie_intersaction" % intersaction.isinf().sum())
+        intersaction[intersaction.isnan()] = 0
+        intersaction[intersaction.isinf()] = 0
     return intersaction
 
 
@@ -537,39 +554,44 @@ def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point
 
 '''
 order : T x N, 表示第i次传播的顺序
-return bool tensor, True means has flipped
+return bool tensor, N x T, 表示第i个点是否在第j次是否被翻转
 '''
 def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False,verbose=False,points_weight = None):
-    MyTimer = util.timer_factory()
-    order = torch.tensor(order).to(pts.device)
-    order.data = order.data.long()
-    T,N = order.shape
-    
-    pointWeight = torch.ones(len(pts)).to(pts.device)
-    
-    # 每个点的权重被设置为其第k远邻的距离
-    
-    with MyTimer("prepare"):
-        interactions = torch.zeros(T,N).to(pts.device).type(pts.dtype) # 当前visited点对所有点的影响。shape: T x N
-        interaction_mat = xie_intersaction(pts, pts, eps=eps) # N x N, 表示第i个点受到的来自第j个点的电场
-        if points_weight is not None:
-            interaction_mat = interaction_mat * pointWeight[None,:]
-        visited = torch.zeros_like(order).bool()
-        weights = visited.clone().type(pts.dtype)
+    with torch.no_grad():
+        MyTimer = util.timer_factory()
+        order = torch.tensor(order).to(pts.device)
+        order.data = order.data.long()
+        T,N = order.shape
         
-    rg = torch.arange(T).to(pts.device)
-    with MyTimer("propagation"):
-        for i in range(N):
-            idx = order[:,i]
-            visited[rg,idx] = True
-            interactions[rg,idx] = torch.sum(interaction_mat[idx] * weights, dim=-1)
-            # print(weights.dtype)
-            weights[rg,idx] = torch.where(interactions[rg,idx] < 0, -1.0, 1.0).type(pts.dtype)
-                       
-    if diffuse:
-        with MyTimer("diffuse"):
-            interactions  = (interaction_mat[:,None,:] * weights[None,:,:]).sum(dim=-1)
-            interactions = interactions.T
+        pointWeight = torch.ones(len(pts)).to(pts.device)
+        
+        # 每个点的权重被设置为其第k远邻的距离
+        
+        with MyTimer("prepare"):
+            interactions = torch.zeros(T,N).to(pts.device).type(pts.dtype) # 当前visited点对所有点的影响。shape: T x N
+            interaction_mat = xie_intersaction(pts, pts, eps=eps) # N x N, 表示第i个点受到的来自第j个点的电场
+            if points_weight is not None:
+                interaction_mat = interaction_mat * pointWeight[None,:]
+            visited = torch.zeros_like(order).bool() # T x N
+            weights = visited.clone().type(pts.dtype) # T x N 表示第i次传播时，第j个点翻转的状态
+            
+        rg = torch.arange(T).to(pts.device)
+        with MyTimer("propagation"):
+            for i in range(N):
+                idx = order[:,i]
+                visited[rg,idx] = True
+                interactions[rg,idx] = torch.sum(interaction_mat[idx] * weights, dim=-1)
+                # print(weights.dtype)
+                weights[rg,idx] = torch.where(interactions[rg,idx] < 0, -1.0, 1.0).type(pts.dtype)
+                        
+        if diffuse:
+            with MyTimer("diffuse"):
+                if interaction_mat.shape[0] < 5000:
+                    interactions  = (interaction_mat[None,:,:] * weights[:,None,:]).sum(dim=-1)
+                else:
+                    for i in range(T):
+                        interactions[i] = (interaction_mat * weights[i][None,:]).sum(dim=-1)
+    torch.cuda.empty_cache()
     return (interactions<0)
 
 
