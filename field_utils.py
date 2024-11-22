@@ -388,6 +388,44 @@ def strongest_field_propagation_points(pts: torch.Tensor, diffuse=False, startin
         return pts
 
 
+# # 返回xie_field.shape = [targt.shape[0],source.shape[0],3],xie_field[i,j]表示第i个target点受到的第j个source产生的能量
+# def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000):
+#     with torch.no_grad():
+#         if source.shape[0] * target.shape[0] > max_pts ** 2:
+#             def break_by_source():
+#                 mid = int(source.shape[0] / 2)
+#                 return torch.cat([xie_field(source[:mid], target, eps, max_pts),
+#                                     xie_field(source[mid:], target, eps, max_pts)], dim=1)
+                
+#             def break_by_target():
+#                 mid = int(target.shape[0] / 2)
+#                 return torch.cat([xie_field(source, target[:mid], eps, max_pts),
+#                                     xie_field(source, target[mid:], eps, max_pts)], dim=0)
+#             if source.shape[0] > target.shape[0]:
+#                 return break_by_source()
+#             else:
+#                 return break_by_target()
+#         R = source[None,:,:3] - target[:,None,:3] # M x N x 3, 表示第M个target点到第N个source点的距离向量
+#         R_norm = R.norm(dim=-1) # 
+#         zero_mask = R_norm == 0
+#         normal_s = source[:, 3:] 
+#         horizental_distant = torch.cross(normal_s[None,:,:], R).norm(dim=-1)  / normal_s.norm(dim=-1)[None,:]
+#         Gussian = torch.zeros_like(R_norm)
+#         # h_zero_mask = horizental_distant == 0
+#         # Gussian = torch.exp(-horizental_distant ** 2 / (2 * eps ** 2))
+#         # Gussian = torch.exp(-R_norm ** 2 / (2 * eps ** 2)) * 100
+#         # Gussian[~h_zero_mask] = Gussian[~h_zero_mask] / (horizental_distant[~h_zero_mask] ** 3)
+#         # Gussian[~zero_mask] = Gussian[~zero_mask] / (R_norm[~zero_mask] ** 3)
+#         Gussian[~zero_mask] = torch.ones_like(Gussian[~zero_mask])/ ((R_norm[~zero_mask] + horizental_distant[~zero_mask]) ** 3)
+        
+#         R_unit = R.clone()
+#         R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
+#         normal_s = source[:, 3:] 
+#         semi_normal_s = 2 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit - normal_s
+#         ref_normal_s = semi_normal_s * -1
+#     return ref_normal_s * Gussian[:, :, None]
+
+
 # 返回xie_field.shape = [targt.shape[0],source.shape[0],3],xie_field[i,j]表示第i个target点受到的第j个source产生的能量
 def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000):
     with torch.no_grad():
@@ -416,47 +454,15 @@ def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000):
         # Gussian = torch.exp(-R_norm ** 2 / (2 * eps ** 2)) * 100
         # Gussian[~h_zero_mask] = Gussian[~h_zero_mask] / (horizental_distant[~h_zero_mask] ** 3)
         # Gussian[~zero_mask] = Gussian[~zero_mask] / (R_norm[~zero_mask] ** 3)
-        Gussian[~zero_mask] = torch.ones_like(Gussian[~zero_mask])/ ((R_norm[~zero_mask] + horizental_distant[~zero_mask]) ** 3)
+        Gussian[~zero_mask] = torch.ones_like(Gussian[~zero_mask])/ ((R_norm[~zero_mask]) ** 3)
         
         R_unit = R.clone()
         R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
         normal_s = source[:, 3:] 
-        semi_normal_s = 2 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit - normal_s
+        semi_normal_s = 3* (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit - normal_s
         ref_normal_s = semi_normal_s * -1
     return ref_normal_s * Gussian[:, :, None]
 
-
-def xie_field_cube(source:torch.Tensor, target: torch.Tensor, eps):
-    R = source[None,:,:3] - target[:,None,:3] # M x N x 3, 表示第M个target点到第N个source点的距离向量
-    R_norm = R.norm(dim=-1) # 
-    zero_mask = R_norm == 0
-    normal_s = source[:, 3:] 
-    distance_decay = torch.zeros_like(R_norm)
-    distance_decay[~zero_mask] = torch.ones_like(distance_decay[~zero_mask])/(R_norm[~zero_mask])
-    
-    R_unit = R.clone()
-    R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
-    normal_s = source[:, 3:] 
-    semi_normal_s = 2 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit - normal_s
-    ref_normal_s = semi_normal_s * -1
-    return ref_normal_s * distance_decay[:, :, None]
-
-# def dipole_field(sources: torch.Tensor, means: torch.Tensor,eps):
-#     p = sources[:, 3:]
-#     R = sources[:, None, :3] - means[None, :, :3]
-#     # 排除距离为0的点产生的电场
-#     zero_mask = R.norm(dim=-1) == 0
-#     # if zero_mask.any():
-#         # print("warning: %d zero distance in field_grad" % zero_mask.sum())
-#     R_unit = R.clone()
-#     R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
-#     R_unit[zero_mask] = 0
-#     E = 3 * (p[:, None, :] * R_unit).sum(dim=-1)[:, :, None] * R_unit - p[:, None, :]
-#     E[zero_mask] = 0
-#     E = E / (R.norm(dim=-1) ** 3 + eps)[:, :, None]
-#     # 交换axis 0 和 axis 1
-#     E = E.transpose(0,1)
-#     return E
 
 
 def draw_field(source:torch.Tensor, target: torch.Tensor, field_cacular,opt = 'save', times = 0,*args, **kwargs):
