@@ -447,22 +447,12 @@ def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000):
         R_norm = R.norm(dim=-1) # 
         zero_mask = R_norm == 0
         normal_s = source[:, 3:] 
-        horizental_distant = torch.cross(normal_s[None,:,:], R).norm(dim=-1)  / normal_s.norm(dim=-1)[None,:]
-        Gussian = torch.zeros_like(R_norm)
-        # h_zero_mask = horizental_distant == 0
-        # Gussian = torch.exp(-horizental_distant ** 2 / (2 * eps ** 2))
-        # Gussian = torch.exp(-R_norm ** 2 / (2 * eps ** 2)) * 100
-        # Gussian[~h_zero_mask] = Gussian[~h_zero_mask] / (horizental_distant[~h_zero_mask] ** 3)
-        # Gussian[~zero_mask] = Gussian[~zero_mask] / (R_norm[~zero_mask] ** 3)
-        Gussian[~zero_mask] = torch.ones_like(Gussian[~zero_mask])/ ((R_norm[~zero_mask]) ** 3)
-        
         R_unit = R.clone()
         R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
         normal_s = source[:, 3:] 
-        semi_normal_s = 3* (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit - normal_s
-        ref_normal_s = semi_normal_s * -1
-    return ref_normal_s * Gussian[:, :, None]
-
+        ref_normal_s  = normal_s - 2 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit 
+        ref_normal_s[~zero_mask] /= ((R_norm[~zero_mask]) ** 3)[:,None]
+    return ref_normal_s
 
 
 def draw_field(source:torch.Tensor, target: torch.Tensor, field_cacular,opt = 'save', times = 0,*args, **kwargs):
