@@ -450,7 +450,7 @@ def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000):
         R_unit = R.clone()
         R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
         normal_s = source[:, 3:] 
-        ref_normal_s  = normal_s - 2 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit 
+        ref_normal_s  = normal_s - 3 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit 
         ref_normal_s[~zero_mask] /= ((R_norm[~zero_mask]) ** 3)[:,None]
     return ref_normal_s
 
