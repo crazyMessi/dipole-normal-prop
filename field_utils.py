@@ -640,19 +640,20 @@ times: 传播次数;最后投票;默认为1,即只从starting_point开始传播�
 k: 生成图的k近邻
 treshold: 生成图的treshold
 '''
-def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1,times = 1,use_weight = False):
+def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1,times = 1,use_pw = False):
     assert times % 2 == 1 and times > 0
     MyTimer = util.timer_factory()
     with MyTimer("Generate Graph"):
         starting_points = [starting_point]
+        np.random.seed(0)
         while len(np.unique(starting_points)) < times:
             t = np.random.randint(0,pts.shape[0])
             if t not in starting_points:
                 starting_points.append(t)
         
         xyz = pts[:,:3].cpu().numpy()
-        G,mean_k_dist = graph.getLinkedListGraphfromPc(xyz, k, treshold)
-        if use_weight:
+        G,mean_k_dist = graph.getEMSTfromPC(xyz, k, treshold)
+        if use_pw:
             pointWeight = mean_k_dist
         else:
             pointWeight = None
@@ -691,5 +692,5 @@ def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, star
             cnts += all_flipstatus[:,i].int()
         for i in range(len(pts)):
             if cnts[i] > times/2:
-                pts[i,3:] *= -1
+                pts[i,3:] *= -1 
     return cnts > times/2
