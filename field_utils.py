@@ -425,9 +425,9 @@ def strongest_field_propagation_points(pts: torch.Tensor, diffuse=False, startin
 #         ref_normal_s = semi_normal_s * -1
 #     return ref_normal_s * Gussian[:, :, None]
 
-
+from scipy.spatial import KDTree
 # 返回xie_field.shape = [targt.shape[0],source.shape[0],3],xie_field[i,j]表示第i个target点受到的第j个source产生的能量
-def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000):
+def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000):    
     with torch.no_grad():
         if source.shape[0] * target.shape[0] > max_pts ** 2:
             def break_by_source():
@@ -444,6 +444,16 @@ def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000):
             else:
                 return break_by_target()
         R = source[None,:,:3] - target[:,None,:3] # M x N x 3, 表示第M个target点到第N个source点的距离向量
+        # # 由target建立kdtree
+        # xyz = target.clone().cpu().numpy()[:,:3]
+        # sxyz = source.clone().cpu().numpy()[:,:3]
+        # tree = KDTree(xyz)
+        # tree_mask = np.zeros([len(target),len(source)]).T # T * S
+        # k = min(len(xyz),100)
+        # d,idx = tree.query(sxyz,k=k)
+        # for i in range(len(tree_mask)):
+        #     tree_mask[i][idx[i]] = 1
+        # tree_mask = torch.tensor(tree_mask.T,dtype=float,device=source.device)
         R_norm = R.norm(dim=-1) # 
         zero_mask = R_norm == 0
         normal_s = source[:, 3:] 
@@ -452,6 +462,7 @@ def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000):
         normal_s = source[:, 3:] 
         ref_normal_s  = normal_s - 3 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit 
         ref_normal_s[~zero_mask] /= ((R_norm[~zero_mask]) ** 3)[:,None]
+        # ref_normal_s *= tree_mask[:,:,None]
     return ref_normal_s
 
 
