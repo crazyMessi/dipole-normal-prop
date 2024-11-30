@@ -536,7 +536,7 @@ def meshlab_estimate_normal(inputpc,smoothiter=0):
     m = ml.Mesh(xyz)
     ms = ml.MeshSet()
     ms.add_mesh(m)
-    ms.compute_normal_for_point_clouds(smoothiter = 0)    
+    ms.compute_normal_for_point_clouds(smoothiter = smoothiter)    
     normals = ms.current_mesh().vertex_normal_matrix()
     inputpc = torch.cat((inputpc[:, :3], torch.Tensor(normals).to(inputpc.device)), dim=1)
     return inputpc

@@ -71,7 +71,7 @@ def single_propagate_file(pc_path,verbose=False, use_origin_normal=False, propag
             gt_pc = ori_pc.clone()
             
     if not use_origin_normal:
-        input_pc = util.estimate_normals(input_pc, max_nn=30)    
+        input_pc = util.estimate_normals(input_pc, max_nn=10)    
     else:
         input_pc = ori_pc.clone()
     
