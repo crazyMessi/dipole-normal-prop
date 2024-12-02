@@ -71,7 +71,7 @@ def tree_xie_propagation(xyz_data,config):
     input_pc = util.npxyz2tensor(xyz_data).to(device)
     input_pc = util.estimate_normals(input_pc, max_nn=config['max_nn'])
     input_pc, transform = util.Transform.trans(input_pc)
-    field_utils.xie_propagation_points_onbfstree(input_pc, eps=config['eps'], diffuse=config['diffuse'], times=config['times'], starting_point=0)
+    field_utils.xie_propagation_points_onbfstree(input_pc, eps=config['eps'], diffuse=config['diffuse'], times=config['times'], starting_point=0,knn_mask=config['knn_mask'])
     if field_utils.measure_mean_potential(input_pc) < 0:
         input_pc[:, 3:] *= -1
     transformed_pc = transform.inverse(input_pc)

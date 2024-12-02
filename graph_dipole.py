@@ -39,7 +39,7 @@ def xie_propagation_points_file(input_pc,eps = 1e-2,verbose=True):
     return propagate_points_file(input_pc,field_utils.xie_propagation_points, eps=eps, diffuse=True, starting_point=0,verbose=verbose)
 
 def xie_tree_propagation_points_file(input_pc,eps = 1e-2,verbose=True,times=1,use_pw=False):
-    return propagate_points_file(input_pc,field_utils.xie_propagation_points_onbfstree, eps=eps, diffuse=True, starting_point=0,verbose=verbose,times=times,use_pw=use_pw)
+    return propagate_points_file(input_pc,field_utils.xie_propagation_points_onbfstree, eps=eps, diffuse=True, starting_point=0,verbose=verbose,times=times,use_pw=use_pw,knn_mask=-1)
 
 
 
@@ -345,4 +345,4 @@ if __name__ == '__main__':
     # verbose_run_file = lambda x: run_file(x,True)
     with MyTimer('run floder'): 
         # print(run_res_and_compare(input_pc_path))
-        run_floder("D:\Documents\zhudoongli\CG\project/NormalEstimation\dipole-normal-prop/data/gt_test_2/","test11301",hander=run_file)    
+        run_floder("D:\Documents\zhudoongli\CG\project/NormalEstimation\dipole-normal-prop/data/gt_test_2/","dipole5",hander=run_file)    
