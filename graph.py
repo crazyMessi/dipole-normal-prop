@@ -255,6 +255,8 @@ class GraphPC:
 
 '''
 邻接链表表示的图
+get_bfs_route: 把graph视为一个无权图,进行bfs
+get_weighted_bfs_route: 把graph视为加权图,进行bfs
 '''
 class LinkedListGraph:
     
@@ -329,11 +331,11 @@ class LinkedListGraph:
                     visited[edge.v] = True
                     heapq.heappush(q,(edge.w,edge.v))
             if len(q) == 0:
-                if visited.any() == True:
+                if visited.all() == True:
                     break
                 # 将第一个未访问的节点加入
                 idx = np.where(visited == False)[0]
-                q.append(idx[0])
+                heapq.heappush(q,(0,idx[0]))
                 visited[idx[0]] = True
                 unit += 1
         if unit != 1:
@@ -373,8 +375,9 @@ def test_sklearn_kdtree(xyz:np.ndarray,k:int = 10,times = 1000):
 return :
 - G: LinkedListGraph
 - mean_k_dist: the mean distance of the k nearest neighbors
+非标准的EMST，因为加入了阈值
 '''
-def getLinkedListGraphfromPc(xyz:np.ndarray,k:int = 10,threshold:float = 0.1):
+def getEMSTfromPC(xyz:np.ndarray,k:int = 10,threshold:float = 0.1):
     # 建树
     tree = KDTree(xyz)
     n = len(xyz)
@@ -387,8 +390,38 @@ def getLinkedListGraphfromPc(xyz:np.ndarray,k:int = 10,threshold:float = 0.1):
                 G.add_edge(i,int(idx[i,j]),distance[i,j])
     mean_k_dist = np.mean(distance,axis=1)
     return G,mean_k_dist
-    
-    
+
+def hoppe_dist(x,y):
+    if np.linalg.norm(x[:3]) == 0 or np.linalg.norm(y[:3]) == 0:
+        return 1
+    n1 = x[:3]/np.linalg.norm(x[:3])
+    n2 = y[:3]/np.linalg.norm(y[:3])
+    return 1 - np.clip(np.abs(np.dot(n1,n2)),0,1)
+
+'''
+param:
+- nxyz: n*6的点云
+- k: k近邻
+- dist_func: 距离函数, 默认为欧式距离
+return :
+- G: LinkedListGraph
+- mean_k_dist: the mean distance of the k nearest neighbors
+'''
+def getRiemannianGraphfromPC(nxyz:np.ndarray,k:int = 10,dist_func:callable = hoppe_dist):
+    # 建树
+    tree = KDTree(nxyz)
+    n = len(nxyz)
+    G = LinkedListGraph(n)
+    distance,idx = tree.query(nxyz,k)
+    for i in range(n):
+        for j in range(k):
+            if idx[i,j] != i:
+                if dist_func is None:
+                    G.add_edge(i,int(idx[i,j]),distance[i,j])
+                else:
+                    G.add_edge(i,int(idx[i,j]),dist_func(nxyz[i],nxyz[int(idx[i,j])]))
+    mean_k_dist = np.mean(distance,axis=1)
+    return G,mean_k_dist
 
 '''
 计算一个指派的weight_sum
