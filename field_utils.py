@@ -428,7 +428,7 @@ def strongest_field_propagation_points(pts: torch.Tensor, diffuse=False, startin
 from scipy.spatial import KDTree
 # 返回xie_field.shape = [targt.shape[0],source.shape[0],3],xie_field[i,j]表示第i个target点受到的第j个source产生的能量
 # knn_mask: knn mask的k近邻居 -1表示不使用knn_mask 
-def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000,knn_mask = -1):    
+def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000,knn_mask = -1,C=3):    
     with torch.no_grad():
         if source.shape[0] * target.shape[0] > max_pts ** 2:
             def break_by_source():
@@ -462,7 +462,7 @@ def xie_field(source:torch.Tensor, target: torch.Tensor, eps, max_pts=5000,knn_m
         R_unit = R.clone()
         R_unit[~zero_mask] = R[~zero_mask] / R[~zero_mask].norm(dim=-1)[:, None]
         normal_s = source[:, 3:] 
-        ref_normal_s  = normal_s - 3 * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit 
+        ref_normal_s  = normal_s - C * (normal_s * R_unit).sum(dim=-1)[:, :, None] * R_unit 
         ref_normal_s[~zero_mask] /= ((R_norm[~zero_mask]) ** 3)[:,None]
         if knn_mask > 0:
             ref_normal_s *= tree_mask[:,:,None]
@@ -506,9 +506,9 @@ def draw_field(source:torch.Tensor, target: torch.Tensor, field_cacular,opt = 's
 # source: N x 6, target: M x 6 
 # eps: 高斯核参数 越大越平滑
 # return: M x N
-def xie_intersaction(source: torch.Tensor, target: torch.Tensor, eps,knn_mask):
+def xie_intersaction(source: torch.Tensor, target: torch.Tensor, eps,knn_mask,C):
     with torch.no_grad():
-        ref_normal_s = xie_field(source, target, eps=eps,knn_mask=knn_mask)
+        ref_normal_s = xie_field(source, target, eps=eps,knn_mask=knn_mask,C=C)
         intersaction  = ( ref_normal_s * target[:,None, 3:] ).sum(dim=-1)
         if intersaction.isnan().any():
             print("warning: %d nan in xie_intersaction" % intersaction.isnan().sum())
@@ -566,7 +566,7 @@ def xie_propagation_points(pts: torch.Tensor, eps, diffuse=False, starting_point
 order : T x N, 表示第i次传播的顺序
 return bool tensor, N x T, 表示第i个点是否在第j次是否被翻转
 '''
-def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False,verbose=False,points_weight = None,knn_mask=-1):
+def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False,verbose=False,points_weight = None,knn_mask=-1,C=3):
     with torch.no_grad():
         MyTimer = util.timer_factory()
         order = torch.tensor(order).to(pts.device)
@@ -579,7 +579,7 @@ def xie_propagation_points_in_order(pts: torch.Tensor, eps, order, diffuse=False
         
         with MyTimer("prepare"):
             interactions = torch.zeros(T,N).to(pts.device).type(pts.dtype) # 当前visited点对所有点的影响。shape: T x N
-            interaction_mat = xie_intersaction(pts, pts, eps=eps,knn_mask=knn_mask) # N x N, 表示第i个点受到的来自第j个点的电场
+            interaction_mat = xie_intersaction(pts, pts, eps=eps,knn_mask=knn_mask,C=C) # N x N, 表示第i个点受到的来自第j个点的电场
             if points_weight is not None:
                 interaction_mat = interaction_mat * pointWeight[None,:]
             visited = torch.zeros_like(order).bool() # T x N
@@ -654,7 +654,7 @@ times: 传播次数;最后投票;默认为1,即只从starting_point开始传播�
 k: 生成图的k近邻
 treshold: 生成图的treshold
 '''
-def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1,times = 1,use_pw = False,knn_mask=-1):
+def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, starting_point=0,verbose = False,k=10,treshold=0.1,times = 1,use_pw = False,knn_mask=-1,C=3):
     assert times % 2 == 1 and times > 0
     MyTimer = util.timer_factory()
     with MyTimer("Generate Graph"):
@@ -691,7 +691,7 @@ def xie_propagation_points_onbfstree(pts: torch.Tensor, eps, diffuse=False, star
     #         all_flipstatus[:,i] = xie_propagation_points_in_order(pts.clone(), eps, [orders[i]], diffuse,verbose=False)[0]
 
     with MyTimer("xie_propagation_points_in_order times = %d" % times):
-        all_flipstatus = xie_propagation_points_in_order(pts.clone(), eps, orders, diffuse,verbose=False,points_weight=pointWeight,knn_mask=knn_mask).T
+        all_flipstatus = xie_propagation_points_in_order(pts.clone(), eps, orders, diffuse,verbose=False,points_weight=pointWeight,knn_mask=knn_mask,C=C).T
 
     with MyTimer("Vote"):
         A = torch.zeros([times,times],dtype=torch.float).to(pts.device)

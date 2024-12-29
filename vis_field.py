@@ -47,30 +47,30 @@ def plot_F(F, x=np.linspace(-5, 5, 100), y=np.linspace(-5, 5, 100), z=np.linspac
     axes[1, 0].set_xlabel("x")
     axes[1, 0].set_ylabel("y")
 
-    # # 绘制三维等值面
-    # fig3d = go.Figure(data=go.Isosurface(
-    #     x=X.flatten(), y=Y.flatten(), z=Z.flatten(),
-    #     value=F_values.flatten(),
-    #     isomin=0.05,  # 设置最小值
-    #     isomax=1.0,  # 设置最大值
-    #     opacity=0.5,  # 透明度
-    #     surface_count=10,  # 设置等值面的数量
-    #     colorscale='Viridis'
-    # ))
+    # 绘制三维等值面
+    fig3d = go.Figure(data=go.Isosurface(
+        x=X.flatten(), y=Y.flatten(), z=Z.flatten(),
+        value=F_values.flatten(),
+        isomin=0.05,  # 设置最小值
+        isomax=1.0,  # 设置最大值
+        opacity=0.5,  # 透明度
+        surface_count=10,  # 设置等值面的数量
+        colorscale='Viridis'
+    ))
 
-    # fig3d.update_layout(
-    #     title="Interactive Isosurface of F",
-    #     scene=dict(
-    #         xaxis_title="X",
-    #         yaxis_title="Y",
-    #         zaxis_title="Z"
-    #     )
-    # )
+    fig3d.update_layout(
+        title="Interactive Isosurface of F",
+        scene=dict(
+            xaxis_title="X",
+            yaxis_title="Y",
+            zaxis_title="Z"
+        )
+    )
 
-    # # 显示二维和三维图形
-    # plt.tight_layout()
-    # plt.show()
-    # fig3d.show()
+    # 显示二维和三维图形
+    plt.tight_layout()
+    plt.show()
+    fig3d.show()
 
 
 def draw_F(F, x=np.linspace(-5, 5, 100), y=np.linspace(-5, 5, 100), z=np.linspace(-5, 5, 100), levels=10, filename="isosurface_point_cloud.ply",verbose=False):

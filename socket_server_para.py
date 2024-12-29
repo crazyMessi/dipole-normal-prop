@@ -9,7 +9,7 @@ torch.manual_seed(1)
 
 # 设置服务器的IP和端口
 HOST = '0.0.0.0'  # 监听所有IP地址
-PORT = 12344     # 监听的端口号
+PORT = 12345     # 监听的端口号
 REQUEST_BUFFER_SIZE = 1000 # 接收缓冲区大小，单位为字节
 max_thread = 50 # 同时处理的最大线程数
 
@@ -68,10 +68,15 @@ def release_pts(len_pts):
 
 
 def tree_xie_propagation(xyz_data,config):
+    if len(xyz_data) < config['max_nn']:
+        log_msg(f"Point number is less than max_nn. {len(xyz_data)} points requested, but at least {config['max_nn']} points required.",mode='warning')
+        xyz_normal = np.ones((len(xyz_data), 6))
+        xyz_normal[:, :3] = xyz_data
+        return xyz_normal
     input_pc = util.npxyz2tensor(xyz_data).to(device)
     input_pc = util.estimate_normals(input_pc, max_nn=config['max_nn'])
     input_pc, transform = util.Transform.trans(input_pc)
-    field_utils.xie_propagation_points_onbfstree(input_pc, eps=config['eps'], diffuse=config['diffuse'], times=config['times'], starting_point=0,knn_mask=config['knn_mask'])
+    field_utils.xie_propagation_points_onbfstree(input_pc, eps=config['eps'], diffuse=config['diffuse'], times=config['times'], starting_point=0,knn_mask=config['knn_mask'],C=config['C'])
     if field_utils.measure_mean_potential(input_pc) < 0:
         input_pc[:, 3:] *= -1
     transformed_pc = transform.inverse(input_pc)
